@@ -12,6 +12,12 @@ from time import time
 # h5py
 import h5py
 
+# numpy
+import numpy as np
+
+# sklearn
+from sklearn.preprocessing import StandardScaler
+
 class FileInput :
     """
     FileInput structure
@@ -96,9 +102,7 @@ def unique_filename(file_name) :
             else:
                 file_name = new_file_name
                 break
-
     return file_name
-
 
 def inputs_from_text_file(text_file = "") :
 
@@ -138,7 +142,6 @@ def inputs_from_dir(filedir) :
 
     dir_files = glob.glob("{}/*.hdf5".format(filedir))
     dir_files += glob.glob("{}/*.h5".format(filedir))
-
     return dir_files
 
 def fields_represented(required_fields = [], sample_fields = []) :
@@ -203,6 +206,15 @@ def get_inputs(args) :
 
 def features_from_file(input_file) :
 
+    """
+    From an input text file that has a single feature (variable)
+    on each line, return a list of those features
+
+    Args:
+        input_file : input text file that contains a single feature (variable)
+            on each line
+    """
+
     out = []
     lines = [l.strip() for l in open(input_file)]
     for l in lines :
@@ -247,8 +259,6 @@ def preprocess_file(input_file, input_group, train_size, args) :
         elif input_file.label != 0 and train_size < 0 :
             raise Exception("training size is not set but we are attempting to process an input file without label 0!")
 
-        print("total size after cut = {}, training size = {}".format(ds.size, train_size))
-
         # for now just do half/half, but should implement varying fraction...
         ds_train = ds[:train_size]
         ds_validation = ds[train_size:train_size*2]
@@ -261,11 +271,9 @@ def preprocess_file(input_file, input_group, train_size, args) :
 def preprocess(inputs, args) :
 
     output_filename = unique_filename(args.output)
-
     with h5py.File(output_filename, "w", libver = "latest") as outfile :
 
         sample_group = outfile.create_group("samples")
-
         training_size = -1
 
         for i, input_file in enumerate(inputs) :
@@ -275,6 +283,29 @@ def preprocess(inputs, args) :
             input_group.attrs['filepath'] = input_file.filepath
 
             training_size = preprocess_file(input_file, input_group, training_size, args)
+
+        # construct the scaling group
+        scale_group = outfile.create_group("scaling")
+        feature_list = get_features(args)
+        scaling_inputs = None
+        samples_used_for_scaling = []
+        for isample, sample in enumerate(sample_group) :
+            data = sample_group[sample]["train_features"][:]#.dtype
+            samples_used_for_scaling.append(sample)
+            if isample == 0 :
+                scaling_inputs = floatify( data, feature_list)
+            else :
+                scaling_inputs = np.concatenate( (scaling_inputs, floatify( data, feature_list )), axis = 0 )
+
+        samples_str = ",".join(samples_used_for_scaling)
+        scale_group.attrs["scale_samples"] = samples_str
+        scaler = StandardScaler() # sklearn
+        scaler.fit(scaling_inputs)
+        scales, means, vars = scaler.scale_, scaler.mean_, scaler.var_
+
+        dt_scale = [ ( 'name', h5py.special_dtype(vlen=str) ), ( 'scale', float ), ( 'mean', float ), ( 'var', float ) ]
+        scaling_data = np.array( list(zip(feature_list, scales, means, vars)), dtype = dt_scale)
+        scaling_dataset = scale_group.create_dataset("scaling_data", shape = scaling_data.shape, dtype = dt_scale, data = scaling_data, maxshape = (None,))
 
 def main() :
 
