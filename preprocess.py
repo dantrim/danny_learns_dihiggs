@@ -5,16 +5,67 @@ import argparse
 import sys
 import os
 import glob
+import json
+import hashlib
 from time import time
 
 # h5py
 import h5py
 
+# sklearn
+from sklearn.preprocessing import StandardScaler 
+
+def floatify(input_array, feature_list) :
+    ftype = [(name, float) for name in feature_list]
+    return input_array.astype(ftype).view(float).reshape(input_array.shape + (-1,))
+
+def unique_filename(file_name) :
+
+    if os.path.isfile(file_name):
+        expand = 1
+        while True:
+            expand += 1
+            new_file_name = file_name.split(".h5")[0] + "_" + str(expand) + ".h5"
+            if os.path.isfile(new_file_name):
+                continue
+            else:
+                file_name = new_file_name
+                break
+
+    return file_name
+
+class FileInput :
+    def __init__(self, descriptor = "") :
+        self.label = -1
+        self.name = ""
+        self.filepath = ""
+
+        self.absorb(descriptor)
+
+    def absorb(self, descriptor) :
+        d = descriptor.strip()
+        d = d.split()
+
+        if len(d) != 3 :
+            raise Exception("input descriptor not of expected form! (descriptor is : {})".format(descriptor))
+
+        self.label = int(d[0])
+        self.name = str(d[1])
+
+        if not (str(d[2]).endswith(".h5") or str(d[2]).endswith(".hdf5")) :
+            raise Exception("an input file does not appear to be an HDF5 file (file : {})".format(str(d[2])))
+
+        self.filepath = str(d[2])
+
 def inputs_from_text_file(text_file = "") :
 
     """
-    Return a list of *.hdf5 or *.h5 files contained in a text
-    file (each line is a separate file)
+    Return a list of FileInput objects for each of the lines in
+    the input text file. Each line of the input file is assumed to
+    be 3 columns:
+        col 0 : training label (integer)
+        col 1 : name of sample (string)
+        col 2 : full path to input HDF5 file
 
     Arguments:
         text_file : input *.txt file
@@ -28,8 +79,8 @@ def inputs_from_text_file(text_file = "") :
     for l in lines :
         if not l : continue
         if l.startswith("#") : continue
-        if l.endswith(".h5") or l.endswith(".hdf5") :
-            out.append(l)
+        fi = FileInput(l)
+        out.append(fi)
     return out
 
 def inputs_from_dir(filedir) :
@@ -76,18 +127,18 @@ def datasets_with_name(input_files = [], dataset_name = "", req_fields = None) :
 
     out = []
     for ifile in input_files :
-        with h5py.File(ifile, 'r', libver = 'latest') as sample_file :
+        with h5py.File(ifile.filepath, 'r', libver = 'latest') as sample_file :
             if dataset_name in sample_file :    
                 dtype = sample_file[dataset_name].dtype.names
                 sample_fields = list(sample_file[dataset_name].dtype.names)
                 if req_fields != "ALL_FIELDS" and len(req_fields) > 0 :
                     if not fields_represented(req_fields, sample_fields) :
-                        print("WARNING dataset (={}) does not have all of the required fields, missing {}".format(ifile, set(sample_fields) - set(req_fields)))
+                        print("WARNING dataset (={}) does not have all of the required fields, missing {}".format(ifile.filepath, set(sample_fields) - set(req_fields)))
                         continue
-                print("file {} : {}".format(ifile, sample_file[dataset_name]))
+                print("file {} : {}".format(ifile.filepath, sample_file[dataset_name]))
                 out.append(ifile)
             else :
-                print("WARNING dataset (={}) not found in input file {}".format( dataset_name, ifile ))
+                print("WARNING dataset (={}) not found in input file {}".format( dataset_name, ifile.filepath ))
     return out
 
 def get_inputs(args) :
@@ -108,12 +159,12 @@ def get_inputs(args) :
     if os.path.isfile(user_input) and user_input.endswith(".txt") :
         return datasets_with_name(input_files = inputs_from_text_file(user_input), dataset_name = dsname, req_fields = requested_fields)
     # assume a single file
-    elif os.path.isfile(user_input) and user_input.endswith(".h5") \
-            or user_input.endswith(".hdf5") :
-        return datasets_with_name(input_files = [user_input], dataset_name = dsname, req_fields = requested_fields)
-    # assume a directory of files
-    elif os.path.isdir(user_input) : 
-        return datasets_with_name(input_files = inputs_from_dir(user_input), dataset_name = dsname, req_fields = requested_fields)
+    #elif os.path.isfile(user_input) and user_input.endswith(".h5") \
+    #        or user_input.endswith(".hdf5") :
+    #    return datasets_with_name(input_files = [user_input], dataset_name = dsname, req_fields = requested_fields)
+    ## assume a directory of files
+    #elif os.path.isdir(user_input) : 
+    #    return datasets_with_name(input_files = inputs_from_dir(user_input), dataset_name = dsname, req_fields = requested_fields)
 
 def features_from_file(input_file) :
 
@@ -139,22 +190,123 @@ def get_features(args) :
     else :
         return args.feature_list.split(",")
 
+#def preprocess_file(input_file, args) :
+#
+#    # make a new output file name
+#    outfilename = input_file.filepath.split("/")[-1]
+#    outfilename = outfilename.split(".")[0]
+#    outfilename += "_processed.h5"
+#    print(" {} -> {}".format(input_file.filepath, outfilename))
+#
+#
+#    # open the output file for writing
+#    with h5py.File(outfilename, 'w', libver = 'latest') as outfile :
+#
+#        data_group = outfile.create_group("superNt")
+#        feature_list = get_features(args)
+#        if feature_list == "all" :
+#            feature_list = []
+#
+#        with h5py.File(input_file.filepath, 'r', libver = 'latest') as infile :
+#
+#            ds = infile[args.dataset_name]
+#            if len(feature_list) > 0 :
+#
+#                # select only the dataset containing the features (variables) we want
+#                #field_select_str = ",".join("'%s'" % v for v in feature_list)
+#                #print(feature_list)
+#                #print("selecting out only {} fields ({})".format(len(feature_list), field_select_str))
+#                #ds = ds[tuple(field_select_str)]
+#                print("selecting out {} features".format(len(feature_list)))
+#                ds = ds[tuple(feature_list)]
+#
+#            # hardcode the selection
+#            indices = (ds['nBJets'] == 2)
+#            ds = ds[indices]
+#
+#            # get the scaling information
+#            dsfloats = floatify(ds, feature_list)
+#
+#            out_ds = data_group.create_dataset("features", shape = ds.shape, dtype = ds.dtype, data = ds, maxshape = (None,))
+
+def preprocess_file(input_file, input_group, train_size, args) :
+
+    feature_list = get_features(args)
+    if feature_list == "all" :
+        feature_list = []
+
+    with h5py.File(input_file.filepath, 'r', libver = 'latest') as infile :
+        ds = infile[args.dataset_name]
+        if len(feature_list) > 0 :
+            ds = ds[tuple(feature_list)]
+
+        # hardcode the selection
+        indices = (ds['nBJets'] == 2)
+        ds = ds[indices]
+
+        if input_file.label == 0 and train_size < 0 :
+            train_size = int(float(ds.size) / 2.0)
+            if args.training_size != 0 :
+                train_size = int(args.training_size)
+        elif input_file.label != 0 and train_size < 0 :
+            raise Exception("training size is not set but we are attempting to process an input file without label 0!")
+
+        print("total size after cut = {}, training size = {}".format(ds.size, train_size))
+
+        # for now just do half/half, but should implement varying fraction...
+        ds_train = ds[:train_size]
+        ds_validation = ds[train_size:train_size*2]
+
+        out_ds_train = input_group.create_dataset("train_features", shape = ds_train.shape, dtype = ds_train.dtype, data = ds_train, maxshape = (None,))
+        out_ds_validation = input_group.create_dataset("train_validation", shape = ds_validation.shape, dtype = ds_validation.dtype, data = ds_validation, maxshape = (None,))
+
+        return train_size
+
+def preprocess(inputs, args) :
+
+    output_filename = unique_filename(args.output)
+
+    with h5py.File(output_filename, "w", libver = "latest") as outfile :
+
+        sample_group = outfile.create_group("samples")
+
+        training_size = -1
+
+        for i, input_file in enumerate(inputs) :
+
+            input_group = sample_group.create_group(input_file.name)
+            input_group.attrs['training_label'] = input_file.label
+            input_group.attrs['filepath'] = input_file.filepath
+
+            training_size = preprocess_file(input_file, input_group, training_size, args)
+
 def main() :
 
     parser = argparse.ArgumentParser(description = "Pre-process your inputs")
     parser.add_argument("-i", "--input",
         help = "Provide input HDF5 files [HDF5 file, text filelist, or directory of files]",
         required = True)
+    parser.add_argument("-o", "--output", help = "Provide output filename", default = "wwbb_preprocessed.h5")
     parser.add_argument("-f", "--feature-list", help = "Provide list of features to slim on [comma-separated list, text file]",
         default = "all")
     parser.add_argument("-d", "--dataset-name", help = "Common dataset name in files",
                 required = True)
+    parser.add_argument("-s", "--selection-file", help = "Provide a selection file (JSON)", default = "")
     parser.add_argument("-v", "--verbose", help = "Be loud about it", default = False,
         action = 'store_true')
+    parser.add_argument("--training-size", help = "Provide number of events for training (default is half of sample with training label 0)", default = 0, type = int)
+    parser.add_argument("--validation-size", help = "Provide number of events for validation (default is half of sample with training label 0)", default = 0, type = int)
     args = parser.parse_args()
+
+    if args.selection_file != "" :
+        # right now just hard code the selection
+        print("Selection file handling not yet implemented, exiting")
+        sys.exit()
 
     inputs = get_inputs(args)
     print("Found {} input files".format(len(inputs)))
+
+    preprocess(inputs, args)
 
 
 #_________________________________
