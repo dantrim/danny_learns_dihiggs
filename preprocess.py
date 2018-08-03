@@ -45,7 +45,7 @@ class FileInput :
 
     @property
     def descriptor(self) :
-        return self.raw_descriptor
+        return self._raw_descriptor
     @descriptor.setter
     def descriptor(self, raw_descriptor = "") :
         self._raw_descriptor = raw_descriptor
