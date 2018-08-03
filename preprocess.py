@@ -12,8 +12,73 @@ from time import time
 # h5py
 import h5py
 
-# sklearn
-from sklearn.preprocessing import StandardScaler 
+class FileInput :
+    """
+    FileInput structure
+
+    This structure is an interface to the input samples and should
+    encode things like the associated training label for this sample,
+    the input filepath, and the descriptive name of the sample.
+
+    Note:
+        Currently this structure can only be built from the text file format
+        used in initial builds.
+
+    Args:
+        descriptor : one of the lines in an input text filelist, expected to be of
+            CSV with 3 columns: 1) training label (integer), 2) descriptive name (one-word),
+            3) full path to this sample's file
+    Attributes:
+        label : training label for this sample
+        name : descriptive name for this sample (one word)
+        filepath : full path to the original input HDF5 file
+        descriptor : input text file descriptor
+
+    """
+    def __init__(self, descriptor = "") :
+        self._label = -1
+        self._name = ""
+        self._filepath = ""
+        self._raw_descriptor = ""
+
+        self.descriptor = descriptor
+
+    @property
+    def descriptor(self) :
+        return self.raw_descriptor
+    @descriptor.setter
+    def descriptor(self, raw_descriptor = "") :
+        self._raw_descriptor = raw_descriptor
+        d = raw_descriptor.strip()
+        d = d.split()
+        if len(d) != 3 :
+            raise Exception("input descriptor not of expected form (descriptor is : {})".format(raw_descriptor))
+        self.label = int(d[0])
+        self.name = str(d[1])
+        if not (str(d[2]).endswith(".h5") or str(d[2]).endswith(".hdf5")) :
+            raise Exception("an input file does not appear to be an HDF5 file (file : {})".format(str(d[2])))
+        self.filepath = str(d[2])
+
+    @property
+    def label(self) :
+        return self._label
+    @label.setter
+    def label(self, val) :
+        self._label = val
+
+    @property
+    def name(self) :
+        return self._name
+    @name.setter
+    def name(self, val) :
+        self._name = val
+
+    @property
+    def filepath(self) :
+        return self._filepath
+    @filepath.setter
+    def filepath(self, val) :
+        self._filepath = val
 
 def floatify(input_array, feature_list) :
     ftype = [(name, float) for name in feature_list]
@@ -34,28 +99,6 @@ def unique_filename(file_name) :
 
     return file_name
 
-class FileInput :
-    def __init__(self, descriptor = "") :
-        self.label = -1
-        self.name = ""
-        self.filepath = ""
-
-        self.absorb(descriptor)
-
-    def absorb(self, descriptor) :
-        d = descriptor.strip()
-        d = d.split()
-
-        if len(d) != 3 :
-            raise Exception("input descriptor not of expected form! (descriptor is : {})".format(descriptor))
-
-        self.label = int(d[0])
-        self.name = str(d[1])
-
-        if not (str(d[2]).endswith(".h5") or str(d[2]).endswith(".hdf5")) :
-            raise Exception("an input file does not appear to be an HDF5 file (file : {})".format(str(d[2])))
-
-        self.filepath = str(d[2])
 
 def inputs_from_text_file(text_file = "") :
 
@@ -135,7 +178,6 @@ def datasets_with_name(input_files = [], dataset_name = "", req_fields = None) :
                     if not fields_represented(req_fields, sample_fields) :
                         print("WARNING dataset (={}) does not have all of the required fields, missing {}".format(ifile.filepath, set(sample_fields) - set(req_fields)))
                         continue
-                print("file {} : {}".format(ifile.filepath, sample_file[dataset_name]))
                 out.append(ifile)
             else :
                 print("WARNING dataset (={}) not found in input file {}".format( dataset_name, ifile.filepath ))
@@ -158,13 +200,6 @@ def get_inputs(args) :
     # text file with multiple files
     if os.path.isfile(user_input) and user_input.endswith(".txt") :
         return datasets_with_name(input_files = inputs_from_text_file(user_input), dataset_name = dsname, req_fields = requested_fields)
-    # assume a single file
-    #elif os.path.isfile(user_input) and user_input.endswith(".h5") \
-    #        or user_input.endswith(".hdf5") :
-    #    return datasets_with_name(input_files = [user_input], dataset_name = dsname, req_fields = requested_fields)
-    ## assume a directory of files
-    #elif os.path.isdir(user_input) : 
-    #    return datasets_with_name(input_files = inputs_from_dir(user_input), dataset_name = dsname, req_fields = requested_fields)
 
 def features_from_file(input_file) :
 
@@ -189,45 +224,6 @@ def get_features(args) :
         return features_from_file(args.feature_list)
     else :
         return args.feature_list.split(",")
-
-#def preprocess_file(input_file, args) :
-#
-#    # make a new output file name
-#    outfilename = input_file.filepath.split("/")[-1]
-#    outfilename = outfilename.split(".")[0]
-#    outfilename += "_processed.h5"
-#    print(" {} -> {}".format(input_file.filepath, outfilename))
-#
-#
-#    # open the output file for writing
-#    with h5py.File(outfilename, 'w', libver = 'latest') as outfile :
-#
-#        data_group = outfile.create_group("superNt")
-#        feature_list = get_features(args)
-#        if feature_list == "all" :
-#            feature_list = []
-#
-#        with h5py.File(input_file.filepath, 'r', libver = 'latest') as infile :
-#
-#            ds = infile[args.dataset_name]
-#            if len(feature_list) > 0 :
-#
-#                # select only the dataset containing the features (variables) we want
-#                #field_select_str = ",".join("'%s'" % v for v in feature_list)
-#                #print(feature_list)
-#                #print("selecting out only {} fields ({})".format(len(feature_list), field_select_str))
-#                #ds = ds[tuple(field_select_str)]
-#                print("selecting out {} features".format(len(feature_list)))
-#                ds = ds[tuple(feature_list)]
-#
-#            # hardcode the selection
-#            indices = (ds['nBJets'] == 2)
-#            ds = ds[indices]
-#
-#            # get the scaling information
-#            dsfloats = floatify(ds, feature_list)
-#
-#            out_ds = data_group.create_dataset("features", shape = ds.shape, dtype = ds.dtype, data = ds, maxshape = (None,))
 
 def preprocess_file(input_file, input_group, train_size, args) :
 
@@ -307,7 +303,6 @@ def main() :
     print("Found {} input files".format(len(inputs)))
 
     preprocess(inputs, args)
-
 
 #_________________________________
 if __name__ == "__main__" :
