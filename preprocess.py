@@ -264,7 +264,7 @@ def preprocess_file(input_file, input_group, train_size, args) :
         ds_validation = ds[train_size:train_size*2]
 
         out_ds_train = input_group.create_dataset("train_features", shape = ds_train.shape, dtype = ds_train.dtype, data = ds_train, maxshape = (None,))
-        out_ds_validation = input_group.create_dataset("train_validation", shape = ds_validation.shape, dtype = ds_validation.dtype, data = ds_validation, maxshape = (None,))
+        out_ds_validation = input_group.create_dataset("validation_features", shape = ds_validation.shape, dtype = ds_validation.dtype, data = ds_validation, maxshape = (None,))
 
         return train_size
 
