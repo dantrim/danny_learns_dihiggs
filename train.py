@@ -14,7 +14,7 @@ from keras.layers import Input, Dense, Dropout
 from keras.optimizers import SGD
 from keras import regularizers
 from keras import initializers
-#import keras
+import keras
 
 # numpy
 import numpy as np
@@ -219,6 +219,33 @@ def build_combined_input(training_samples, data_scaler = None, scale = True) :
     targets = np.array(targets, dtype = int )
     return inputs, targets
 
+def build_keras_model( n_inputs, n_outputs ) :
+
+    n_nodes = 200
+    do_frac = 0.5
+    layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
+
+    input_layer = Input( shape = (n_inputs,) )
+    x = Dense( n_nodes, **layer_opts ) (input_layer)
+    x = Dense( n_nodes, **layer_opts ) (x)
+    x = Dense( n_nodes, **layer_opts ) (x)
+    predictions = Dense( n_outputs, activation = 'softmax')(x)
+
+    model = Model(inputs = input_layer, outputs = predictions)
+    model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+
+    return model
+
+def train(n_classes, input_features, targets, model) :
+
+    # encode the targets
+    targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+
+    # fit
+    fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
+
+    return model, fit_history
+
 def main() :
 
     parser = argparse.ArgumentParser(description = "Train a Keras model over you pre-processed files")
@@ -237,6 +264,19 @@ def main() :
     print("Pre-processed file contained {} samples: {}, {}".format(len(training_samples), [s.name() for s in training_samples], [s.class_label() for s in training_samples]))
 
     input_features, targets = build_combined_input(training_samples, data_scaler = data_scaler, scale = True)
+    model = build_keras_model( len(data_scaler.feature_list()), len(training_samples) )
+
+    model, fit_history = train(len(training_samples), input_features, targets, model)
+
+    # save
+    job_suff = "_{}".format(args.output) if args.output else ""
+    arch_name = "architecture{}.json".format(job_suff)
+    weights_name = "weights{}.h5".format(job_suff)
+    print("Saving architecture to: {}".format(arch_name))
+    print("Saving weights to     : {}".format(weights_name))
+    with open(arch_name, 'w') as arch_file :
+        arch_file.write(model.to_json())
+    model.save_weights(weights_name)
 
 if __name__ == "__main__" :
     main()
