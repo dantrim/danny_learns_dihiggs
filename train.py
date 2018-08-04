@@ -192,7 +192,33 @@ def load_input_file(args) :
             sys.exit()
 
     return samples, data_scaler
-    
+
+def build_combined_input(training_samples, data_scaler = None, scale = True) :
+
+    targets = []
+    # used extended slicing to partition arbitrary number of samples
+    sample0, sample1, *other = training_samples
+
+    targets.extend( np.ones( sample0.data().shape[0] ) * sample0.class_label() )
+    targets.extend( np.ones( sample1.data().shape[0] ) * sample1.class_label() )
+
+    inputs = np.concatenate( (sample0.data(), sample1.data()), axis = 0)
+    for sample in other :
+        inputs = np.concatenate( (inputs, sample.data()) , axis = 0 )
+        targets.extend( np.ones( sample.data().shape[0] ) * sample.class_label() )
+
+    # perform scaling
+    if scale :
+        #print("applying scaling: mean = {}".format(data_scaler.mean()))
+        #print("applying        : scale  {}".format(data_scaler.scale()))
+        #print(50 * "-")
+        #print(" --> initial : {}".format(inputs[1]))
+        inputs = (inputs - data_scaler.mean()) / data_scaler.scale()
+        #print(" --> after   : {}".format(inputs[1]))
+
+    targets = np.array(targets, dtype = int )
+    return inputs, targets
+
 def main() :
 
     parser = argparse.ArgumentParser(description = "Train a Keras model over you pre-processed files")
@@ -205,7 +231,12 @@ def main() :
     args = parser.parse_args()
 
     training_samples, data_scaler = load_input_file(args)
+    if len(training_samples) < 2 :
+        print("ERROR there are not enough training samples loaded to perform a training")
+        sys.exit()
     print("Pre-processed file contained {} samples: {}, {}".format(len(training_samples), [s.name() for s in training_samples], [s.class_label() for s in training_samples]))
+
+    input_features, targets = build_combined_input(training_samples, data_scaler = data_scaler, scale = True)
 
 if __name__ == "__main__" :
     main()
