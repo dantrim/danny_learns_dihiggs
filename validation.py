@@ -153,6 +153,8 @@ def make_nn_output_plots( model = None, inputs = None, samples = None, targets =
         ax.legend(loc='best', frameon = False)
         fig.savefig("test_nn_output_class{}.pdf".format(label), bbox_inches='tight', dpi = 200)
 
+    return nn_scores
+
 def build_discriminants(scores = None, labels = [], targets_list = None) :
 
     # get the NN output for each discriminant
@@ -232,6 +234,172 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
         savename = "test_nn_disc_class{}.pdf".format(label)
         fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
+def make_nn_roc_curve( output_scores = None, samples = [], inputs = None, targets = None, signal_class = 0 ) :
+
+    class_labels = set(targets)
+    targets_list = list(targets)
+    nn_scores_dict = {}
+
+    names = {}
+    for sample in samples :
+        names[sample.class_label()] = sample.name()
+
+    for ilabel, label in enumerate(class_labels) :
+        left = targets_list.index(label)
+        right = len(targets_list) - 1 - targets_list[::-1].index(label)
+        nn_scores_dict[label] = output_scores[left:right+1]
+
+    lowbin = 0
+    highbin = 1
+
+
+    edges = np.concatenate(
+        [[-np.inf], np.linspace(lowbin,highbin,500), [np.inf]]) 
+
+    # we want the sample efficiency to pass the signal eff
+    sample_eff = {}
+    h_total = []
+    w_total = []
+    for label in nn_scores_dict :
+        # select out the scores for class 'label' for NN output 'signal_class'
+        scores = nn_scores_dict[label][:,signal_class]
+
+        weights = sample_with_label(label, samples).eventweights
+        h_nn, _ = np.histogram( scores, bins = edges, weights = weights.reshape((scores.shape[0],) ))
+        if label != signal_class :
+            h_total.append(h_nn)
+            w_total.append(weights)
+
+        # We want to integrate from the high end and then flip
+        # to give the yield "to the right" of the value at
+        # which the integration starts, since "to the right" is
+        # signal like. We also normalize to give the value as
+        # a relative fraction, or efficiency, of selecting that sample at the
+        # given value where we integrate from.
+        eff = np.cumsum( h_nn[::-1] )[::-1] / h_nn.sum()
+        sample_eff[label] = eff
+
+    summed_bkg = h_total[0]
+    for h in h_total[1:] :
+        summed_bkg += h
+    summed_weights = w_total[0]
+    for h in w_total[1:] :
+        summed_weights += h
+    eff_total_bkg = np.cumsum( summed_bkg[::-1] )[::-1]/summed_bkg.sum()
+
+    signal_eff = None
+    bkg_eff = {}
+    for e in sample_eff :
+        if e == signal_class :
+            signal_eff = sample_eff[e]
+        else :
+            bkg_eff[e] = sample_eff[e]
+
+
+    fig, ax = plt.subplots(1,1)
+    for bkg_label in bkg_eff :
+    
+        bkg = bkg_eff[bkg_label]
+        valid_rej = bkg > 0
+        sig = np.array(signal_eff[:])
+
+        valid_sig = (sig != 1.0)
+        valid = valid_rej & valid_sig
+
+        bkg = bkg[valid]
+        sig = sig[valid]
+
+        bkg_rej = 1/bkg
+        ax.plot(sig, bkg_rej, label = names[bkg_label])
+
+    valid_rej_total = eff_total_bkg > 0
+    sig = np.array(signal_eff[:])
+    valid_sig_total = sig != 1.0
+    valid_total = valid_rej_total & valid_sig_total
+
+    bkg_total = eff_total_bkg[valid_total]
+    sig_total = sig[valid_total]
+    bkg_rej_total = 1/bkg_total
+    ax.plot(sig_total, bkg_rej_total, label = "Total Bkg")
+
+    ax.set_yscale('log')
+    ax.set_xlabel('$hh$ efficiency', horizontalalignment='right', x=1)
+    ax.set_ylabel('Background rejection, $1/\\epsilon_{bkg}$', horizontalalignment='right', y=1)
+    ax.legend(loc='best', frameon = False)
+
+    # save
+    fig.savefig("test_nn_roc.pdf", bbox_inches = 'tight', dpi = 200)
+
+def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, signal_class = 0) :
+
+    class_labels = set(targets)
+    targets_list = list(targets)
+    
+
+    names = {}
+    for sample in samples :
+        names[sample.class_label()] = sample.name()
+
+    discriminants = build_discriminants( scores = scores, labels = class_labels, targets_list = targets_list )
+    idx_map = {}
+    for ilabel, label in enumerate(class_labels) :
+        left = targets_list.index(label)
+        right = len(targets_list) - 1 - targets_list[::-1].index(label)
+        idx_map[label] = [left,right+1]
+
+    lowbin = -40
+    highbin = 20
+    edges = np.concatenate(
+        [[-np.inf], np.linspace(lowbin,highbin,500), [np.inf]])
+
+    sample_eff = {}
+
+    fig, ax = plt.subplots(1,1)
+
+    signal_eff = None
+    bkg_eff = {}
+    for label in class_labels :
+
+        # get the discriminant for the 'signal_class' specified
+        left, right = idx_map[label][0], idx_map[label][1]
+        disc = discriminants[signal_class][left:right]
+        weights = sample_with_label(label, samples).eventweights
+
+        ok_idx = valid_idx(disc)
+        disc = disc[ok_idx]
+        weights = weights[ok_idx]
+
+        h_d, _ = np.histogram( disc, bins = edges, weights = weights.reshape( (disc.shape[0],)) )
+        eff = np.cumsum( h_d[::-1] )[::-1] / h_d.sum()
+        if label == signal_class :
+            signal_eff = eff
+        else :
+            bkg_eff[label] = eff
+
+    fig, ax = plt.subplots(1,1)
+    for bkg_label in bkg_eff :
+        bkg = bkg_eff[bkg_label]
+        valid_rej = bkg > 0
+        sig = np.array(signal_eff[:])
+        valid_sig = sig != 0
+        valid = valid_rej & valid_sig
+
+        bkg = bkg[valid]
+        sig = sig[valid]
+        bkg_rej = 1.0 / bkg
+        ax.plot(sig, bkg_rej, label = names[bkg_label])
+
+    ax.set_yscale('log')
+    ax.set_xlabel('$hh$ efficiency', horizontalalignment = 'right', x =1)
+    ax.set_ylabel('Background rejection, $1/\\epsilon_{bkg}$', horizontalalignment = 'right', y=1)
+    ax.legend(loc='best', frameon = False)
+
+    # save
+    fig.savefig("test_nn_roc_disc.pdf", bbox_inches = 'tight', dpi = 200)
+    
+
+
+
 def main() :
 
     parser = argparse.ArgumentParser(description = "Run validation plots over a trained model")
@@ -248,8 +416,14 @@ def main() :
     model = load_model(args)
     validation_samples, data_scaler = load_input_file(args)
     input_features, targets = build_combined_input(validation_samples, data_scaler = data_scaler, scale = True)
-    make_nn_output_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
+
+    # plots
+    nn_scores = make_nn_output_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
     make_discriminant_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
+
+    # roc curves
+    make_nn_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets )
+    make_nn_disc_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets )
     
     print("done")
 
