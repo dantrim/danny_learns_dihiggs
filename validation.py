@@ -211,7 +211,7 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
         fig, ax = plt.subplots(1,1)
 #        ax.set_xlim([-40,15])
 #        ax.set_ylim([1e-2,2])
-        binning = np.arange(-40,12,1)
+        binning = np.arange(-40,20,1)
         centers = (binning[1:-2] + binning[2:-1])/2
         ax.set_xlim((centers[0], centers[-1])) 
         ax.set_yscale('log')
