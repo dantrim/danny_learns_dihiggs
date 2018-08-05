@@ -216,17 +216,20 @@ def build_combined_input(training_samples, data_scaler = None, scale = True) :
 
 def build_keras_model( n_inputs, n_outputs ) :
 
-    n_nodes = 200
+    n_nodes = 100
     do_frac = 0.5
     layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
 
     input_layer = Input( shape = (n_inputs,) )
     x = Dense( n_nodes, **layer_opts ) (input_layer)
-    x = Dense( n_nodes, **layer_opts ) (x)
-    x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
     predictions = Dense( n_outputs, activation = 'softmax')(x)
 
     model = Model(inputs = input_layer, outputs = predictions)
+    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.01, momentum = 0.01, nesterov = False), metrics = ['categorical_accuracy'] )
+    #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
     model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
 
     return model
@@ -237,7 +240,8 @@ def train(n_classes, input_features, targets, model) :
     targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
 
     # fit
-    fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
+    fit_history = model.fit(input_features, targets_encoded, epochs = 120, validation_split = 0.2, shuffle = True, batch_size = 4500)
+    #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
 
     return model, fit_history
 
