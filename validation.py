@@ -107,7 +107,7 @@ def build_discriminant(scores_dict, labels) :
 
     return discriminant_dict
 
-def make_nn_output_plots( model = None, inputs = None, samples = None, targets = None) :
+def make_nn_output_plots( model = None, inputs = None, samples = None, targets = None, args = None) :
 
     # set of scores for each label: shape = (n_samples, n_outputs)
     nn_scores = model.predict(inputs)
@@ -151,7 +151,8 @@ def make_nn_output_plots( model = None, inputs = None, samples = None, targets =
             
             #ax.hist(sample_scores_for_label, bins = binning, alpha = 0.3, label = names[sample_label], density = True)
         ax.legend(loc='best', frameon = False)
-        fig.savefig("test_nn_output_class{}.pdf".format(label), bbox_inches='tight', dpi = 200)
+        savename = "nn_outputs_{}_class_{}.pdf".format(args.name, names[label])
+        fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
     return nn_scores
 
@@ -185,7 +186,7 @@ def build_discriminants(scores = None, labels = [], targets_list = None) :
         disc_dict[label] = log_ratio
     return disc_dict
 
-def make_discriminant_plots( model = None, inputs = None, samples = None, targets = None ) :
+def make_discriminant_plots( model = None, inputs = None, samples = None, targets = None, args = None ) :
 
     nn_scores = model.predict(inputs) 
     class_labels = set(targets)
@@ -231,10 +232,10 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
 
         ax.legend(loc = 'best', frameon = False)
 
-        savename = "test_nn_disc_class{}.pdf".format(label)
+        savename = "nn_discriminant_{}_class_{}.pdf".format(args.name, names[label])
         fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
-def make_nn_roc_curve( output_scores = None, samples = [], inputs = None, targets = None, signal_class = 0 ) :
+def make_nn_roc_curve( output_scores = None, samples = [], inputs = None, targets = None, signal_class = 0, args = None) :
 
     class_labels = set(targets)
     targets_list = list(targets)
@@ -328,9 +329,10 @@ def make_nn_roc_curve( output_scores = None, samples = [], inputs = None, target
     ax.legend(loc='best', frameon = False)
 
     # save
-    fig.savefig("test_nn_roc.pdf", bbox_inches = 'tight', dpi = 200)
+    savename = "nn_output_ROC_{}.pdf".format(args.name)
+    fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
-def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, signal_class = 0) :
+def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, signal_class = 0, args = None) :
 
     class_labels = set(targets)
     targets_list = list(targets)
@@ -348,7 +350,7 @@ def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, s
         idx_map[label] = [left,right+1]
 
     lowbin = -40
-    highbin = 20
+    highbin = 40
     edges = np.concatenate(
         [[-np.inf], np.linspace(lowbin,highbin,500), [np.inf]])
 
@@ -358,6 +360,8 @@ def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, s
 
     signal_eff = None
     bkg_eff = {}
+    h_total = []
+    w_total = []
     for label in class_labels :
 
         # get the discriminant for the 'signal_class' specified
@@ -375,6 +379,16 @@ def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, s
             signal_eff = eff
         else :
             bkg_eff[label] = eff
+            h_total.append(h_d)
+            w_total.append(weights)
+
+    summed_bkg = h_total[0]
+    for h in h_total[1:] :
+        summed_bkg += h
+    summed_weights = w_total[0]
+    for h in w_total[1:] :
+        summed_weights += h
+    eff_total_bkg = np.cumsum( summed_bkg[::-1] )[::-1]/summed_bkg.sum()
 
     fig, ax = plt.subplots(1,1)
     for bkg_label in bkg_eff :
@@ -389,16 +403,24 @@ def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, s
         bkg_rej = 1.0 / bkg
         ax.plot(sig, bkg_rej, label = names[bkg_label])
 
+    valid_rej_total = eff_total_bkg > 0
+    sig = np.array(signal_eff[:])
+    valid_sig_total = sig != 1.0
+    valid_total = valid_rej_total & valid_sig_total
+
+    bkg_total = eff_total_bkg[valid_total]
+    sig_total = sig[valid_total]
+    bkg_rej_total = 1/bkg_total
+    ax.plot(sig_total, bkg_rej_total, label = "Total Bkg")
+
     ax.set_yscale('log')
     ax.set_xlabel('$hh$ efficiency', horizontalalignment = 'right', x =1)
     ax.set_ylabel('Background rejection, $1/\\epsilon_{bkg}$', horizontalalignment = 'right', y=1)
     ax.legend(loc='best', frameon = False)
 
     # save
-    fig.savefig("test_nn_roc_disc.pdf", bbox_inches = 'tight', dpi = 200)
-    
-
-
+    savename = "nn_output_ROC_disc_{}.pdf".format(args.name)
+    fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
 def main() :
 
@@ -418,12 +440,12 @@ def main() :
     input_features, targets = build_combined_input(validation_samples, data_scaler = data_scaler, scale = True)
 
     # plots
-    nn_scores = make_nn_output_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
-    make_discriminant_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
+    nn_scores = make_nn_output_plots( model, samples = validation_samples, inputs = input_features, targets = targets, args = args )
+    make_discriminant_plots( model, samples = validation_samples, inputs = input_features, targets = targets, args = args )
 
     # roc curves
-    make_nn_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets )
-    make_nn_disc_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets )
+    make_nn_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets, args = args)
+    make_nn_disc_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets, args = args )
     
     print("done")
 
