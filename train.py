@@ -240,7 +240,7 @@ def train(n_classes, input_features, targets, model) :
     targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
 
     # fit
-    fit_history = model.fit(input_features, targets_encoded, epochs = 120, validation_split = 0.2, shuffle = True, batch_size = 4500)
+    fit_history = model.fit(input_features, targets_encoded, epochs = 80, validation_split = 0.2, shuffle = True, batch_size = 3000)
     #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
 
     return model, fit_history
