@@ -209,12 +209,7 @@ def build_combined_input(training_samples, data_scaler = None, scale = True) :
 
     # perform scaling
     if scale :
-        #print("applying scaling: mean = {}".format(data_scaler.mean()))
-        #print("applying        : scale  {}".format(data_scaler.scale()))
-        #print(50 * "-")
-        #print(" --> initial : {}".format(inputs[1]))
         inputs = (inputs - data_scaler.mean()) / data_scaler.scale()
-        #print(" --> after   : {}".format(inputs[1]))
 
     targets = np.array(targets, dtype = int )
     return inputs, targets

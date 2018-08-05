@@ -21,6 +21,13 @@ import numpy as np
 seed = 347
 np.random.seed(seed)
 
+def sample_with_label(label, samples) :
+
+    for s in samples :
+        if s.class_label() == label :
+            return s
+    return None
+
 def load_input_file(args) :
 
     if not os.path.isfile(args.input) :
@@ -54,6 +61,7 @@ def load_input_file(args) :
                 class_label = process_group.attrs['training_label']
                 s = Sample(name = p, class_label = int(class_label),
                     input_data = floatify( process_group['validation_features'][tuple(data_scaler.feature_list())], data_scaler.feature_list()))
+                s.eventweights = floatify( process_group['validation_features'][tuple(['eventweight'])], ['eventweight'])
                 samples.append(s)
         else :
             print("samples group (={}) not found in file".format(samples_group_name))
@@ -131,10 +139,13 @@ def make_nn_output_plots( model = None, inputs = None, samples = None, targets =
         ax.set_yscale('log')
         binning = np.arange(0,1,0.02)
         centers = (binning[1:-2] + binning[2:-1])/2
+        ax.set_xlim((centers[0], centers[-1])) 
         for sample_label in nn_scores_dict :
             sample_scores_for_label = nn_scores_dict[sample_label][:,label]
+            sample_weights = sample_with_label(sample_label, samples).eventweights
 
-            yields, _ = np.histogram(sample_scores_for_label, bins = binning)
+            yields, _ = np.histogram(sample_scores_for_label, bins = binning,
+                weights = sample_weights.reshape((sample_scores_for_label.shape[0],)))
             yields = yields/yields.sum()
             ax.step(centers, yields[1:-1], label = names[sample_label], where = 'mid')
             
@@ -199,6 +210,7 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
 #        ax.set_ylim([1e-2,2])
         binning = np.arange(-40,12,1)
         centers = (binning[1:-2] + binning[2:-1])/2
+        ax.set_xlim((centers[0], centers[-1])) 
         ax.set_yscale('log')
 
         for sample_label in discriminants :
@@ -208,10 +220,13 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
             # since we took the log_ratio, lets clear out any invalid numbers
             ok_idx = valid_idx(disc_scores_for_sample)
             disc_scores_for_sample = disc_scores_for_sample[ok_idx]
-
-            yields, _ = np.histogram(disc_scores_for_sample, bins = binning)
+            sample_weights = sample_with_label(sample_label, samples).eventweights
+            sample_weights = sample_weights[ok_idx]
+            yields, _ = np.histogram(disc_scores_for_sample, bins = binning,
+                weights = sample_weights.reshape((disc_scores_for_sample.shape[0],)))
             yields = yields / yields.sum()
             ax.step(centers, yields[1:-1], label = names[sample_label], where='mid')
+
         ax.legend(loc = 'best', frameon = False)
 
         savename = "test_nn_disc_class{}.pdf".format(label)
@@ -233,7 +248,6 @@ def main() :
     model = load_model(args)
     validation_samples, data_scaler = load_input_file(args)
     input_features, targets = build_combined_input(validation_samples, data_scaler = data_scaler, scale = True)
-
     make_nn_output_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
     make_discriminant_plots( model, samples = validation_samples, inputs = input_features, targets = targets )
     
