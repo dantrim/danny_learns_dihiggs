@@ -86,6 +86,25 @@ class FileInput :
     def filepath(self, val) :
         self._filepath = val
 
+def mkdir_p(path) :
+
+    import errno
+
+    """
+    Make a directory, if it exists silence the exception
+
+    Args:
+        path : full directory path to be made
+    """
+
+    try :
+        os.makedirs(path)
+    except OSError as exc :
+        if exc.errno == errno.EEXIST and os.path.isdir(path) :
+            pass
+        else :
+            raise
+
 def floatify(input_array, feature_list) :
     ftype = [(name, float) for name in feature_list]
     return input_array.astype(ftype).view(float).reshape(input_array.shape + (-1,))
@@ -249,7 +268,7 @@ def preprocess_file(input_file, input_group, train_size, args) :
             ds = ds[tuple(feature_list)]
 
         # hardcode the selection
-        indices = (ds['nBJets'] == 2)
+        indices = (ds['nBJets'] == 2)# & (ds['met']>45)
         ds = ds[indices]
 
         if input_file.label == 0 and train_size < 0 :
@@ -270,7 +289,13 @@ def preprocess_file(input_file, input_group, train_size, args) :
 
 def preprocess(inputs, args) :
 
-    output_filename = unique_filename(args.output)
+    output_filename = ""
+    if args.outdir != "" :
+        mkdir_p(args.outdir)
+    output_filename += args.outdir 
+    output_filename += "/{}".format(args.output)
+    output_filename = unique_filename(output_filename)
+
     with h5py.File(output_filename, "w", libver = "latest") as outfile :
 
         sample_group = outfile.create_group("samples")
@@ -307,6 +332,8 @@ def preprocess(inputs, args) :
         scaling_data = np.array( list(zip(feature_list, scales, means, vars)), dtype = dt_scale)
         scaling_dataset = scale_group.create_dataset("scaling_data", shape = scaling_data.shape, dtype = dt_scale, data = scaling_data, maxshape = (None,))
 
+    print("storing preprocessed file at : {}".format(os.path.abspath(output_filename)))
+
 def main() :
 
     parser = argparse.ArgumentParser(description = "Pre-process your inputs")
@@ -314,6 +341,7 @@ def main() :
         help = "Provide input HDF5 files [HDF5 file, text filelist, or directory of files]",
         required = True)
     parser.add_argument("-o", "--output", help = "Provide output filename", default = "wwbb_preprocessed.h5")
+    parser.add_argument("--outdir", help = "Provide an output directory for file dumps [default: ./]", default = "./")
     parser.add_argument("-f", "--feature-list", help = "Provide list of features to slim on [comma-separated list, text file]",
         default = "all")
     parser.add_argument("-d", "--dataset-name", help = "Common dataset name in files",
@@ -324,6 +352,7 @@ def main() :
     parser.add_argument("--training-size", help = "Provide number of events for training (default is half of sample with training label 0)", default = 0, type = int)
     parser.add_argument("--validation-size", help = "Provide number of events for validation (default is half of sample with training label 0)", default = 0, type = int)
     args = parser.parse_args()
+
 
     if args.selection_file != "" :
         # right now just hard code the selection

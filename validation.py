@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from train import DataScaler, Sample, floatify, build_combined_input
+from preprocess import mkdir_p, unique_filename
 
 import argparse
 import sys
@@ -152,6 +153,9 @@ def make_nn_output_plots( model = None, inputs = None, samples = None, targets =
             #ax.hist(sample_scores_for_label, bins = binning, alpha = 0.3, label = names[sample_label], density = True)
         ax.legend(loc='best', frameon = False)
         savename = "nn_outputs_{}_class_{}.pdf".format(args.name, names[label])
+        if args.outdir != "" :
+            mkdir_p(args.outdir)
+        savename = "{}/{}".format(args.outdir, savename) 
         fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
     return nn_scores
@@ -233,6 +237,9 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
         ax.legend(loc = 'best', frameon = False)
 
         savename = "nn_discriminant_{}_class_{}.pdf".format(args.name, names[label])
+        if args.outdir != "" :
+            mkdir_p(args.outdir)
+        savename = "{}/{}".format(args.outdir, savename)
         fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
 def make_nn_roc_curve( output_scores = None, samples = [], inputs = None, targets = None, signal_class = 0, args = None) :
@@ -330,6 +337,9 @@ def make_nn_roc_curve( output_scores = None, samples = [], inputs = None, target
 
     # save
     savename = "nn_output_ROC_{}.pdf".format(args.name)
+    if args.outdir != "" :
+        mkdir_p(args.outdir)
+    savename = "{}/{}".format(args.outdir, savename)
     fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
 def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, signal_class = 0, args = None) :
@@ -420,6 +430,8 @@ def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, s
 
     # save
     savename = "nn_output_ROC_disc_{}.pdf".format(args.name)
+    if args.outdir != "" :
+        savename = "{}/{}".format(args.outdir, savename)
     fig.savefig(savename, bbox_inches = 'tight', dpi = 200)
 
 def main() :
@@ -430,7 +442,7 @@ def main() :
         required = True)
     parser.add_argument("-w", "--weights", help = "Provide the NN weights file", required = True)
     parser.add_argument("-a", "--arch", help = "Provide the NN architecture file", required = True)
-    parser.add_argument("--outdir", help = "Provide an output directory for plots", default = ".")
+    parser.add_argument("--outdir", help = "Provide an output directory for plots", default = "./")
     parser.add_argument("-n", "--name", help = "Provide an output filename suffix", default = "")
     parser.add_argument("-v", "--verbose", action = "store_true", default = False, help = "Be loud about it")
     args = parser.parse_args()
@@ -439,6 +451,7 @@ def main() :
     validation_samples, data_scaler = load_input_file(args)
     input_features, targets = build_combined_input(validation_samples, data_scaler = data_scaler, scale = True)
 
+
     # plots
     nn_scores = make_nn_output_plots( model, samples = validation_samples, inputs = input_features, targets = targets, args = args )
     make_discriminant_plots( model, samples = validation_samples, inputs = input_features, targets = targets, args = args )
@@ -446,8 +459,9 @@ def main() :
     # roc curves
     make_nn_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets, args = args)
     make_nn_disc_roc_curve( nn_scores, samples = validation_samples, inputs = input_features, targets = targets, args = args )
+
+    print("done, stuff saved to: {}".format(args.outdir))
     
-    print("done")
 
 
 if __name__ == "__main__" :

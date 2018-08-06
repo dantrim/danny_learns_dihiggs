@@ -4,6 +4,7 @@ import argparse
 import sys
 import os
 from time import time
+from preprocess import mkdir_p, unique_filename
 
 # h5py
 import h5py
@@ -191,6 +192,8 @@ def load_input_file(args) :
             print("samples group (={}) not found in file".format(samples_group_name))
             sys.exit()
 
+    samples = sorted(samples, key = lambda x: x.class_label())
+
     return samples, data_scaler
 
 def build_combined_input(training_samples, data_scaler = None, scale = True) :
@@ -251,7 +254,8 @@ def main() :
     parser.add_argument("-i", "--input",
         help = "Provide input, pre-processed HDF5 file with training, validation, and scaling data",
         required = True)
-    parser.add_argument("-o", "--output", help = "Provide output filename descriptor", default = "test")
+    parser.add_argument("-o", "--outdir", help = "Provide an output directory do dump files [default: ./]", default = "./")
+    parser.add_argument("-n", "--name", help = "Provide output filename descriptor", default = "test")
     parser.add_argument("-v", "--verbose", action = "store_true", default = False,
         help = "Be loud about it")
     args = parser.parse_args()
@@ -265,14 +269,21 @@ def main() :
     input_features, targets = build_combined_input(training_samples, data_scaler = data_scaler, scale = True)
     model = build_keras_model( len(data_scaler.feature_list()), len(training_samples) )
 
+    # TODO : save the fit_history object for later use
     model, fit_history = train(len(training_samples), input_features, targets, model)
 
     # save
-    job_suff = "_{}".format(args.output) if args.output else ""
+    job_suff = "_{}".format(args.name) if args.name else ""
     arch_name = "architecture{}.json".format(job_suff)
     weights_name = "weights{}.h5".format(job_suff)
-    print("Saving architecture to: {}".format(arch_name))
-    print("Saving weights to     : {}".format(weights_name))
+
+    if args.outdir != "" :
+        mkdir_p(args.outdir)
+    arch_name = "{}/{}".format(args.outdir, arch_name)
+    weights_name = "{}/{}".format(args.outdir, weights_name)
+
+    print("Saving architecture to: {}".format(os.path.abspath(arch_name)))
+    print("Saving weights to     : {}".format(os.path.abspath(weights_name)))
     with open(arch_name, 'w') as arch_file :
         arch_file.write(model.to_json())
     model.save_weights(weights_name)
