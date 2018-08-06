@@ -2,6 +2,7 @@
 
 import sys
 import argparse
+from preprocess import mkdir_p, unique_filename
 
 # h5py
 import h5py
@@ -38,10 +39,14 @@ def extract_scale_dataset(args, ignore_features = ['eventweight']) :
             raise Exception("Input file (={}) does not contained the expected \
                 scaling dataset".format(args.input))
 
-        output_name = args.input.replace(".h5","").replace(".hdf5","")
+        output_name = args.input.split("/")[-1].replace(".h5","").replace(".hdf5","")
         output_name += "_scaling_data.h5"
-        if args.output != "" :
-            output_name = args.output
+        if args.outdir != "" :
+            mkdir_p(args.outdir)
+        output_name = "{}/{}".format(args.outdir, output_name)
+        
+#        if args.output != "" :
+#            output_name = args.output
 
         with h5py.File(output_name, 'w', libver = 'latest') as output_file :
             scaling_group = output_file.create_group(scaling_group_name)
@@ -60,10 +65,10 @@ def main() :
         from the HDF5 files produced by 'preprocess.py'")
     parser.add_argument("-i", "--input", help = "Provide an HDF5 file produced by\
         'preprocess.py'", required = True)
-    parser.add_argument("-o", "--output", help = "Provide an output filename (default is\
+    parser.add_argument("-n", "--name", help = "Provide an output filename (default is\
         based on input filename)", default = "")
     parser.add_argument("--outdir", help = "Provide an output directory to store the output", 
-        default = "")
+        default = "./")
     args = parser.parse_args()
 
     extract_scale_dataset(args)
