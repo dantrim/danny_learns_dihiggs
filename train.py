@@ -223,17 +223,19 @@ def build_keras_model( n_inputs, n_outputs ) :
     do_frac = 0.5
     layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
 
-    input_layer = Input( shape = (n_inputs,) )
-    x = Dense( n_nodes, **layer_opts ) (input_layer)
-    #x = Dense( n_nodes, **layer_opts ) (x)
-    #x = Dense( n_nodes, **layer_opts ) (x)
-    #x = Dense( n_nodes, **layer_opts ) (x)
-    predictions = Dense( n_outputs, activation = 'softmax')(x)
+    input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+    x = Dense( n_nodes*2, **layer_opts ) (input_layer)
+    x = Dense( n_nodes*2, **layer_opts ) (input_layer)
+    x = Dropout(0.5)(x)
+    x = Dense( n_nodes, **layer_opts ) (x)
+    predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
 
     model = Model(inputs = input_layer, outputs = predictions)
-    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.01, momentum = 0.01, nesterov = False), metrics = ['categorical_accuracy'] )
+    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.01, nesterov = True), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
-    model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.002, decay=0.1), metrics = ['categorical_accuracy'] )
+    #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
 
     return model
 
@@ -243,7 +245,7 @@ def train(n_classes, input_features, targets, model) :
     targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
 
     # fit
-    fit_history = model.fit(input_features, targets_encoded, epochs = 80, validation_split = 0.2, shuffle = True, batch_size = 3000)
+    fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 4000)
     #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
 
     return model, fit_history
