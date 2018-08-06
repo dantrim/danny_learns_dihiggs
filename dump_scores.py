@@ -153,31 +153,53 @@ def dump_scores(input_file, model, data_scaler, args) :
         ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
     dtype = ds.dtype
     row_count = ds.shape[0]
-    
+
+#    with h5py.File(outname, 'w', libver = 'latest') as outfile :
+#
+#        maxshape = (None,) + ds.shape[1:]
+#        dset = outfile.create_dataset("nn_scores", shape = ds.shape, maxshape = maxshape,
+#            chunks = ds.shape, dtype = ds.dtype)
+#
+#        dset[:] = ds
+#
+#        for chunk in gen :
+#
+#            chunk = chunk[ (chunk['nBJets']==2) ]
+#            weights = chunk['eventweight']
+#            input_features = chunk[data_scaler.feature_list()]
+#            #input_features = input_features[ (input_features['nBJets'] == 2 ) ]
+#            input_features = floatify(chunk[data_scaler.feature_list()], data_scaler.feature_list())
+#            input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
+#            
+#            ds = np.array( list(weights), dtype = [('eventweight', float)])
+#            for io in range(n_outputs) :
+#                ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
+#
+#            dset.resize(row_count + ds.shape[0], axis = 0)
+#            dset[row_count:] = ds
+#            row_count += ds.shape[0]
+
+    dataset_id = 0
     with h5py.File(outname, 'w', libver = 'latest') as outfile :
 
-        maxshape = (None,) + ds.shape[1:]
-        dset = outfile.create_dataset("nn_scores", shape = ds.shape, maxshape = maxshape,
-            chunks = ds.shape, dtype = ds.dtype)
+        for chunk in chunk_generator(input_file, dataset_name = args.dataset) :
 
-        dset[:] = ds
-
-        for chunk in gen :
-
-            chunk = chunk[ (chunk['nBJets']==2) ]
             weights = chunk['eventweight']
             input_features = chunk[data_scaler.feature_list()]
-            #input_features = input_features[ (input_features['nBJets'] == 2 ) ]
             input_features = floatify(chunk[data_scaler.feature_list()], data_scaler.feature_list())
             input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
-            
+            scores = model.predict(input_features)
+            n_outputs = scores.shape[1]
+
             ds = np.array( list(weights), dtype = [('eventweight', float)])
             for io in range(n_outputs) :
                 ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
+            maxshape = (None,) + ds.shape[1:]
 
-            dset.resize(row_count + ds.shape[0], axis = 0)
-            dset[row_count:] = ds
-            row_count += ds.shape[0]
+            dsname = "nn_scores_{}".format(dataset_id)
+            out_ds = outfile.create_dataset(dsname, shape = ds.shape, maxshape = maxshape, chunks = ds.shape, dtype = ds.dtype)
+            out_ds[:] = ds
+            dataset_id += 1
 
     print(" > output saved : {}".format(os.path.abspath(outname)))
 
