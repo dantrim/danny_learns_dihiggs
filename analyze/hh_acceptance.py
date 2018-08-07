@@ -25,6 +25,7 @@ zll_file = "{}/sherpa_zll_scores.h5".format(score_filedir)
 ztt_file = "{}/sherpa_ztt_scores.h5".format(score_filedir)
 wt_file = "{}/wt_bkg_scores.h5".format(score_filedir)
 background_files = [ttbar_file, zll_file, ztt_file, wt_file]
+truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_123456_aug6_custom_scores.h5"
 
 def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
 
@@ -49,8 +50,9 @@ def chunk_generator_dataset(input_dataset, chunksize = 10000) :
         yield input_dataset[x:x+chunksize]
 
 class AcceptanceHolder :
-    def __init__(self, name = "", thresholds = [], yields = [], efficiencies = [], is_disc = False) :
+    def __init__(self, name = "", thresholds = [], yields = [], efficiencies = [], total_yield = 0, is_disc = False) :
         self._name = name
+        self._total_yield = total_yield
         self._thresholds = thresholds
         self._yields_at_cut = yields
         self._efficiencies = efficiencies
@@ -62,12 +64,16 @@ class AcceptanceHolder :
         return self._thresholds
     def yields(self) :
         return self._yields_at_cut
+    def total_yield(self) :
+        return self._total_yield
     def efficiencies(self) :
         return self._efficiencies
     def is_nn_score(self) :
         return not self._is_disc
     def is_discriminant(self) :
         return self._is_disc
+    def index_of_threshold(self, thr) :
+        return list(self._thresholds).index(thr)
 
 def valid_idx(input_array) :
     valid_lo = (input_array > -np.inf)
@@ -216,7 +222,7 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
     #for icut, cut in enumerate(cutvals) :
     #    print("score {0:.5f} {1:.5f}".format(cutvals[icut], eff_by_cut[icut]))
     
-    score_holder = AcceptanceHolder(name = sample_type, thresholds = cutvals, yields = yield_by_cut, efficiencies = eff_by_cut, is_disc = False)
+    score_holder = AcceptanceHolder(name = sample_type, thresholds = cutvals, total_yield = total_yield, yields = yield_by_cut, efficiencies = eff_by_cut, is_disc = False)
     score_holders.append(score_holder)
     
     fig, ax = plt.subplots(1,1)
@@ -242,7 +248,7 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
     #for icut, cut in enumerate(cutvals) :
     #    print("disc {0:.5f} {1:.5f}".format(cutvals[icut], eff_by_cut[icut]))
     
-    disc_holder = AcceptanceHolder(name = sample_type, thresholds = cutvals, yields = yield_by_cut, efficiencies = eff_by_cut, is_disc = True)
+    disc_holder = AcceptanceHolder(name = sample_type, thresholds = cutvals, total_yield = total_yield, yields = yield_by_cut, efficiencies = eff_by_cut, is_disc = True)
     disc_holders.append(disc_holder)
     
     fig, ax = plt.subplots(1,1)
@@ -475,7 +481,7 @@ def get_upperlimit(nbkg = 0) :
         if sig > 1000 :
             sig = -1
             break
-        print("nbkg = {}, sig is at {}, Z -> {}".format(nbkg, sig, z))
+        #print("nbkg = {}, sig is at {}, Z -> {}".format(nbkg, sig, z))
         sig += 0.01
 
     return sig
@@ -528,12 +534,21 @@ def main() :
 
     # signal stuff
     class_dict = get_class_dict(args)
-    sig_class_scores, sig_weights = load_file([args.input], class_dict, sample_type = 'sig')
-
-    bkg_class_scores, bkg_disc_counts = load_file(background_files, class_dict, sample_type = 'bkg')
+    sig_class_counts, sig_disc_counts = load_file([args.input], class_dict, sample_type = 'sig')
+    truth_sig_class_counts, truth_sig_disc_counts = load_file([truth_sig_file], class_dict, sample_type = "sig_truth")
+    bkg_class_counts, bkg_disc_counts = load_file(background_files, class_dict, sample_type = 'bkg')
     s95_dict = calculate_upperlimits(bkg_disc_counts)
 
     print("s95_dict {}".format(s95_dict.keys()))
+    for key in s95_dict :
+        cut_idx = sig_disc_counts.index_of_threshold(key)
+        sig_eff = sig_disc_counts.efficiencies()[cut_idx]
+        sig_acc = truth_sig_disc_counts.efficiencies()[cut_idx]
+        br = 0.071        
+        print(" CUT {} -> e x A x BR = {}".format(key, sig_eff * sig_acc * br))
+
+        #print("key {} -> idx {}, idx {} == S95 = {}".format(key, sig_disc_counts.index_of_threshold(key), truth_sig_disc_counts.index_of_threshold(key), s95_dict[key]))
+    
 
 if __name__ == "__main__" :
     main()
