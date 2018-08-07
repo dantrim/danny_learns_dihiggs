@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import significance
 
 
-score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files/"
+score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/"
 ttbar_file = "{}/CENTRAL_410009_scores.h5".format(score_filedir)
 zll_file = "{}/sherpa_zll_scores.h5".format(score_filedir)
 ztt_file = "{}/sherpa_ztt_scores.h5".format(score_filedir)
@@ -42,6 +42,11 @@ def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
         dataset = f[dataset_name]
         for x in range(0, dataset.size, chunksize) :
             yield dataset[x:x+chunksize]
+
+def chunk_generator_dataset(input_dataset, chunksize = 10000) :
+
+    for x in range(0, input_dataset.size, chunksize) :
+        yield input_dataset[x:x+chunksize]
 
 class AcceptanceHolder :
     def __init__(self, name = "", thresholds = [], yields = [], efficiencies = [], is_disc = False) :
@@ -92,7 +97,7 @@ def get_discriminant( signal_prob = None, bkg_probs = [] ) :
         denominator += bkg_prob
     return np.log( signal_prob / denominator )
 
-def load_file(input_files = [], class_dict = {}) :
+def load_file(input_files = [], class_dict = {}, sample_type = "") :
 
     dataset_name = "nn_scores"
 
@@ -106,136 +111,146 @@ def load_file(input_files = [], class_dict = {}) :
     score_lowbin = 0
     score_highbin = 1
     score_edges = np.concatenate(
-        [[-np.inf], np.linspace(score_lowbin, score_highbin, 51), [np.inf]])
+        [[-np.inf], np.linspace(score_lowbin, score_highbin, 101), [np.inf]])
     #edges = np.arange(0,1,0.1)
 
     disc_lowbin = -30
     disc_highbin = 20
-    disc_edges = np.concatenate([[-np.inf], np.linspace(disc_lowbin,disc_highbin,101), [np.inf]])
+    disc_edges = np.concatenate([[-np.inf], np.linspace(disc_lowbin,disc_highbin,202), [np.inf]])
 
 
     score_holders = []
     disc_holders = []
 
+
     for infile in input_files :
 
         with h5py.File(infile, 'r', libver = 'latest') as sample_file :
 
-            if dataset_name not in sample_file :
-                print("ERROR expected dataset (={}) not found in input file".format(dataset_name))
-                sys.exit()
+            print("opening {}".format(infile))
+
+            for dataset in sample_file :
+
+                if dataset_name not in dataset :
+                    print("WARNING expected dataset (={}) not found in input file".format(dataset_name))
+                    continue
+
+                input_dataset = sample_file[dataset]
+
+#                chunks = chunk_generator(infile, dataset_name = dataset_name, chunksize = 1000)
+                chunks = chunk_generator_dataset(input_dataset = input_dataset)
+
+                n_total = 0
+                for chunk in chunks :
+
+                    n_total += chunk.size
+
+                    if chunk.dtype.names[0] != "eventweight" :
+                        print("ERROR dataset is not of expected type (first field is not the eventweight)")
+                        sys.exit()
+
+                    score_names = chunk.dtype.names[1:]
+                    if class_dict and len(score_names) != len(class_dict.keys()) :
+                        print("ERROR expected number of NN scores based on user input labels provided \
+                            (={}) does not match the number of score fields in the input file (={})"\
+                            .format(len(class_dict.keys()), len(score_names)))
+                        sys.exit()
+
+                    weights = chunk['eventweight']
+                    class_probs = {}
+                    for iscore, score_name in enumerate(score_names) :
+                        label = int(score_name.split("_")[-1])
+                        scores = chunk[score_name]
+                        class_probs[label] = scores
+
+                    sig_scores = class_probs[0]
+                    bkg_scores = []
+                    for label in class_probs :
+                        if label == 0 : continue
+                        bkg_scores.append(class_probs[label])
+                    d_sig = get_discriminant(sig_scores, bkg_scores)
+
+                    idx = valid_idx(sig_scores)
+                    valid_scores = sig_scores[idx]
+                    valid_weights = weights[idx]
+
+                    idx = valid_scores != 0
+                    valid_scores = valid_scores[idx]
+                    valid_weights = valid_weights[idx]
+
+                    hscore, _ = np.histogram(valid_scores, bins = score_edges, weights = valid_weights)#.reshape((valid_scores.shape[0],)))
+
+                    if load_histo_score :
+                        load_histo_score = False
+                        histo_score = hscore
+                    else :
+                        histo_score += hscore
+
+                    idx = valid_idx(d_sig)
+                    valid_d_sig = d_sig[idx]
+                    valid_weights = weights[idx]
+                    hdisc, _ = np.histogram(valid_d_sig, bins = disc_edges, weights = valid_weights.reshape((valid_d_sig.shape[0],)))
+
+                    if load_histo_disc :
+                        load_histo_disc = False
+                        histo_disc = hdisc
+                    else :
+                        histo_disc += hdisc
 
 
-        chunks = chunk_generator(infile, dataset_name = dataset_name, chunksize = 1000)
-
-        n_total = 0
-        for chunk in chunks :
-
-            n_total += chunk.size
-
-            if n_total > 70000 :
-            #if n_total > 300000 :
-                break
-
-            if chunk.dtype.names[0] != "eventweight" :
-                print("ERROR dataset is not of expected type (first field is not the eventweight)")
-                sys.exit()
-
-            score_names = chunk.dtype.names[1:]
-            if class_dict and len(score_names) != len(class_dict.keys()) :
-                print("ERROR expected number of NN scores based on user input labels provided \
-                    (={}) does not match the number of score fields in the input file (={})"\
-                    .format(len(class_dict.keys()), len(score_names)))
-                sys.exit()
-
-            weights = chunk['eventweight']
-            class_probs = {}
-            for iscore, score_name in enumerate(score_names) :
-                label = int(score_name.split("_")[-1])
-                scores = chunk[score_name]
-                class_probs[label] = scores
-
-            sig_scores = class_probs[0]
-            bkg_scores = []
-            for label in class_probs :
-                if label == 0 : continue
-                bkg_scores.append(class_probs[label])
-            d_sig = get_discriminant(sig_scores, bkg_scores)
-
-            idx = valid_idx(sig_scores)
-            valid_scores = sig_scores[idx]
-            valid_weights = weights[idx]
-
-            idx = valid_scores != 0
-            valid_scores = valid_scores[idx]
-            valid_weights = valid_weights[idx]
-
-            hscore, _ = np.histogram(valid_scores, bins = score_edges, weights = valid_weights)#.reshape((valid_scores.shape[0],)))
-            #print("max score {}".format(np.max(hscore)))
-            #print("scores {}".format(valid_scores[:10]))
-            #print("weights {}".format(valid_weights[:10]))
-            #print("hscore = {}".format(hscore[:10]))
-
-            if load_histo_score :
-                #histo_score = np.array( valid_scores, dtype = np.float64 )
-                #histo_score_weights = np.array( valid_weights, dtype = np.float64 )
-                load_histo_score = False
-                #histo_score = np.array( valid_scores, dtype = np.float64 )
-                histo_score = hscore
-            else :
-                #histo_score = np.concatenate( (histo_score, valid_scores), axis = 0)
-                #histo_score_weights = np.concatenate( (histo_score_weights, valid_weights), axis = 0)
-                histo_score += hscore
-
-            idx = valid_idx(d_sig)
-            valid_d_sig = d_sig[idx]
-            valid_weights = weights[idx]
-            hdisc, _ = np.histogram(valid_d_sig, bins = disc_edges, weights = valid_weights.reshape((valid_d_sig.shape[0],)))
-
-            if load_histo_disc :
-                load_histo_disc = False
-                #histo_disc = np.array( hdisc, dtype = np.float64 )
-                histo_disc = hdisc
-            else :
-                histo_disc += hdisc
-
-
-        # scores
-
-        cutvals = score_edges
-        centers = (cutvals[1:-2] + cutvals[2:-1])/2
-        cutvals = score_edges[1:-2]
-        yields = histo_score[1:-1]
-        for icut, cut in enumerate(cutvals) :
-            print("score {0:.5f} {1:.5f}".format(cutvals[icut], yields[icut]))
-        total = yields.sum()
-        effs = yields / total
-
-        score_holder = AcceptanceHolder(name = "bkg", thresholds = cutvals, yields = yields, efficiencies = effs, is_disc = False)
-        score_holders.append(score_holder)
-
-        fig, ax = plt.subplots(1,1)
-        ax.set_yscale('log')
-        ax.step(centers, effs, label = 'yep', where = 'mid')
-        fig.savefig('test_scor.pdf', bbox_inches = 'tight', dpi = 200)
-
-        # disc
-        cutvals = disc_edges
-        centers = (cutvals[1:-2] + cutvals[2:-1])/2
-        cutvals = disc_edges[1:-2]
-        yields = histo_disc[1:-1]
-        total = yields.sum()
-        effs = yields / total
-
-        disc_holder = AcceptanceHolder(name = "bkg", thresholds = cutvals, yields = yields, efficiencies = effs, is_disc = True)
-        disc_holders.append(disc_holder)
-        
-        fig, ax = plt.subplots(1,1)
-        ax.set_yscale('log')
-        ax.step(centers, effs, label = 'yep', where = 'mid')
-        fig.savefig('test_disc.pdf', bbox_inches = 'tight', dpi = 200)
+    # scores
+    yield_by_cut = np.cumsum(histo_score[::-1])[::-1]
+    total_yield = histo_score.sum()
+    eff_by_cut = yield_by_cut / total_yield
+    
+    yield_by_cut = yield_by_cut[1:-1]
+    eff_by_cut = eff_by_cut[1:-1]
+    
+    cutvals = score_edges
+    centers = (cutvals[1:-2] + cutvals[2:-1])/2
+    cutvals = score_edges[1:-2]
+    yields = histo_score[1:-1]
+    total = yields.sum()
+    effs = yields / total
+    
+    #for icut, cut in enumerate(cutvals) :
+    #    print("score {0:.5f} {1:.5f}".format(cutvals[icut], eff_by_cut[icut]))
+    
+    score_holder = AcceptanceHolder(name = sample_type, thresholds = cutvals, yields = yield_by_cut, efficiencies = eff_by_cut, is_disc = False)
+    score_holders.append(score_holder)
+    
+    fig, ax = plt.subplots(1,1)
+    ax.set_yscale('log')
+    ax.step(centers, eff_by_cut, label = 'yep', where = 'mid')
+    fig.savefig('test_scor_{}.pdf'.format(sample_type), bbox_inches = 'tight', dpi = 200)
+    
+    # disc
+    yield_by_cut = np.cumsum(histo_disc[::-1])[::-1]
+    total_yield = histo_disc.sum()
+    eff_by_cut = yield_by_cut / total_yield
+    
+    yield_by_cut = yield_by_cut[1:-1]
+    eff_by_cut = eff_by_cut[1:-1]
+    
+    
+    cutvals = disc_edges
+    centers = (cutvals[1:-2] + cutvals[2:-1])/2
+    cutvals = disc_edges[1:-2]
+    #yields = histo_disc[1:-1]
+    #total = yields.sum()
+    #effs = yields / total
+    #for icut, cut in enumerate(cutvals) :
+    #    print("disc {0:.5f} {1:.5f}".format(cutvals[icut], eff_by_cut[icut]))
+    
+    disc_holder = AcceptanceHolder(name = sample_type, thresholds = cutvals, yields = yield_by_cut, efficiencies = eff_by_cut, is_disc = True)
+    disc_holders.append(disc_holder)
+    
+    fig, ax = plt.subplots(1,1)
+    ax.set_yscale('log')
+    ax.step(centers, eff_by_cut, label = 'yep', where = 'mid')
+    fig.savefig('test_disc_{}.pdf'.format(sample_type), bbox_inches = 'tight', dpi = 200)
       
-    return score_holders, disc_holders
+    return score_holders[0], disc_holders[0]
 
 def count_things(class_probs = None, sample_weights = None, run_disc = False) :
 
@@ -448,7 +463,7 @@ def get_upperlimit(nbkg = 0) :
         print("invalid bkg value!")
         sys.exit()
 
-    sig = 0.01
+    sig = 0.5
     z = 0
 
     while True :
@@ -458,6 +473,7 @@ def get_upperlimit(nbkg = 0) :
         if z > 1.64 :
             break
         if sig > 1000 :
+            sig = -1
             break
         print("nbkg = {}, sig is at {}, Z -> {}".format(nbkg, sig, z))
         sig += 0.01
@@ -471,19 +487,32 @@ def calculate_upperlimits(counts_holder) :
     yields = counts_holder.yields()
 
     yields = np.array(yields)
-    idx = valid_idx(yields) #yields != 0
-    yields = list(yields[idx])
+    #idx = valid_idx(yields) #yields != 0
+    #yields = list(yields[idx])
 
     #yields = list(yields[idx])
-    cutvals = list( np.array(cutvals)[idx] )
-    print("yields = {}".format(yields))
-    sys.exit()
+    #cutvals = list( np.array(cutvals)[idx] )
+
+    s95_vals = {}
 
     for icut, cutval in enumerate(cutvals) :
 
+        if cutval < 1 : continue
+
         nbkg = yields[icut]
+
+        if nbkg < 0 : continue
+        if nbkg < 1 : continue
+
         delta_b = 0.3
         sig_95 = get_upperlimit(nbkg)
+
+        s95_vals[cutval] = sig_95
+
+    return s95_vals
+        
+
+        
 
 def main() :
 
@@ -499,17 +528,12 @@ def main() :
 
     # signal stuff
     class_dict = get_class_dict(args)
-    sig_class_scores, sig_weights = load_file([args.input], class_dict)
-    #sig_score_counts, sig_disc_counts = count_things(sig_class_scores, sig_weights, args.disc)
+    sig_class_scores, sig_weights = load_file([args.input], class_dict, sample_type = 'sig')
 
-    #bkg_class_scores_list, bkg_weights_list = [], []
-    #for bkg in background_files :
-    #    scores, weights = load_file(bkg, class_dict)
-    #    bkg_class_scores_list.append(scores)
-    #    bkg_weights_list.append(weights)
-    #bkg_score_counts, bkg_disc_counts = count_group(bkg_class_scores_list, bkg_weights_list, args.disc)
+    bkg_class_scores, bkg_disc_counts = load_file(background_files, class_dict, sample_type = 'bkg')
+    s95_dict = calculate_upperlimits(bkg_disc_counts)
 
-    #calculate_upperlimits(bkg_disc_counts)
+    print("s95_dict {}".format(s95_dict.keys()))
 
 if __name__ == "__main__" :
     main()
