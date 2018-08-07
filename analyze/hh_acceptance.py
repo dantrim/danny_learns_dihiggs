@@ -26,6 +26,7 @@ ztt_file = "{}/sherpa_ztt_scores.h5".format(score_filedir)
 wt_file = "{}/wt_bkg_scores.h5".format(score_filedir)
 background_files = [ttbar_file, zll_file, ztt_file, wt_file]
 truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_123456_aug6_custom_scores.h5"
+truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_342053_aug6_scores.h5"
 
 def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
 
@@ -478,7 +479,7 @@ def get_upperlimit(nbkg = 0) :
 
         if z > 1.64 :
             break
-        if sig > 1000 :
+        if sig > 100 :
             sig = -1
             break
         #print("nbkg = {}, sig is at {}, Z -> {}".format(nbkg, sig, z))
@@ -503,7 +504,9 @@ def calculate_upperlimits(counts_holder) :
 
     for icut, cutval in enumerate(cutvals) :
 
-        if cutval < 1 : continue
+        #if cutval < 1 : continue
+        print("########## cutval = {}".format(cutval))
+        if cutval < 0.85 : continue
 
         nbkg = yields[icut]
 
@@ -537,15 +540,20 @@ def main() :
     sig_class_counts, sig_disc_counts = load_file([args.input], class_dict, sample_type = 'sig')
     truth_sig_class_counts, truth_sig_disc_counts = load_file([truth_sig_file], class_dict, sample_type = "sig_truth")
     bkg_class_counts, bkg_disc_counts = load_file(background_files, class_dict, sample_type = 'bkg')
-    s95_dict = calculate_upperlimits(bkg_disc_counts)
 
+    print("blah {}".format(bkg_class_counts.thresholds()))
+    s95_dict = calculate_upperlimits(bkg_class_counts)
     print("s95_dict {}".format(s95_dict.keys()))
     for key in s95_dict :
-        cut_idx = sig_disc_counts.index_of_threshold(key)
-        sig_eff = sig_disc_counts.efficiencies()[cut_idx]
-        sig_acc = truth_sig_disc_counts.efficiencies()[cut_idx]
-        br = 0.071        
-        print(" CUT {} -> e x A x BR = {}".format(key, sig_eff * sig_acc * br))
+        cut_idx = sig_class_counts.index_of_threshold(key)
+        truth_counts = truth_sig_class_counts.yields()[cut_idx]
+        reco_eff = sig_class_counts.yields()[cut_idx] 
+        reco_eff = reco_eff / truth_counts
+#        sig_eff = sig_class_counts.efficiencies()[cut_idx]
+#        sig_eff = sig_class_counts.yields()[cut_idx]
+        sig_acc = truth_sig_class_counts.efficiencies()[cut_idx]
+        br = 0.24        
+        print(" CUT {} N = {} -> e x A x BR = {} x {} x BR = {} (BKG = {}, SIG = {})".format(key, s95_dict[key], reco_eff, sig_acc, reco_eff * sig_acc * br, bkg_class_counts.yields()[cut_idx], sig_class_counts.yields()[cut_idx]))
 
         #print("key {} -> idx {}, idx {} == S95 = {}".format(key, sig_disc_counts.index_of_threshold(key), truth_sig_disc_counts.index_of_threshold(key), s95_dict[key]))
     
