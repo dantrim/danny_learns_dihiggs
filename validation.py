@@ -395,9 +395,9 @@ def make_nn_disc_roc_curve( scores, samples = [], inputs = [], targets = None, s
     summed_bkg = h_total[0]
     for h in h_total[1:] :
         summed_bkg += h
-    summed_weights = w_total[0]
-    for h in w_total[1:] :
-        summed_weights += h
+    #summed_weights = w_total[0]
+    #for h in w_total[1:] :
+    #    summed_weights += h
     eff_total_bkg = np.cumsum( summed_bkg[::-1] )[::-1]/summed_bkg.sum()
 
     fig, ax = plt.subplots(1,1)
