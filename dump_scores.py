@@ -103,10 +103,17 @@ def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
         dataset_name : name of input dataset to process
     """
 
+
     with h5py.File(input_file, 'r', libver = 'latest') as f :
         dataset = f[dataset_name]
-        for x in range(0, dataset.size, chunksize) :
-            yield dataset[x:x+chunksize]
+
+        if "CENTRAL" and "123456" in input_file :
+            n_skip = 19504
+            print("FOR {} ONLY CONSIDERING EVENTS AFTER THE {}'th EVENT".format(input_file, n_skip))
+            yield dataset[n_skip:]
+        else :
+            for x in range(0, dataset.size, chunksize) :
+                yield dataset[x:x+chunksize]
         
 
 def build_discriminant_array(scores, n_labels) :
@@ -184,6 +191,9 @@ def dump_scores(input_file, model, data_scaler, args) :
     with h5py.File(outname, 'w', libver = 'latest') as outfile :
 
         for chunk in chunk_generator(input_file, dataset_name = args.dataset) :
+
+            # apply the selection here
+            chunk = chunk[ chunk['nBJets'] >= 1 ]
 
             weights = chunk['eventweight']
             input_features = chunk[data_scaler.feature_list()]
