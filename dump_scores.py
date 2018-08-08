@@ -109,6 +109,35 @@ def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
             yield dataset[x:x+chunksize]
         
 
+def build_discriminant_array(scores, n_labels) :
+
+    """
+    For each of the labels, construct the log ratio discriminant
+    of the NN scores for this sample.
+
+    Args :
+        scores : NN output scores, shape = (N, n_labels)
+        n_labels : number of NN output scores
+
+    Returns :
+        A python list of numpy arrays, each numpy array being
+        the discriminant for class label i where i is its index
+        in the output list.
+
+        Note: the output discriminants are not striped of NaN
+        or inf values.
+    """
+
+    discriminants = []
+    for inum in range(n_labels) :
+        numerator = scores[:,inum]
+        denominator = np.empty( (scores.shape[0], ), dtype = np.float64 )
+        for iden in range(n_labels) :
+            if iden == inum : continue
+            denominator += scores[:,iden]
+        discriminants.append( np.log( numerator / denominator ) )
+    return discriminants
+
 def dump_scores(input_file, model, data_scaler, args) :
 
     """
@@ -130,54 +159,26 @@ def dump_scores(input_file, model, data_scaler, args) :
         mkdir_p(args.outdir)
     outname = "{}/{}".format(args.outdir, outname)
 
-    
+    #out_ds_created = False
+    #out_ds = None
 
+    #gen = chunk_generator(input_file, dataset_name = args.dataset)
+    #chunk = next(gen)
+    #chunk = chunk [ (chunk['nBJets']==2) ]
+    #row_count = chunk.shape[0]
 
-    out_ds_created = False
-    out_ds = None
+    #weights = chunk['eventweight']
+    #input_features = chunk[data_scaler.feature_list()]
+    #input_features = floatify(chunk[data_scaler.feature_list()], data_scaler.feature_list())
+    #input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
+    #scores = model.predict(input_features)
+    #n_outputs = scores.shape[1]
 
-    gen = chunk_generator(input_file, dataset_name = args.dataset)
-    chunk = next(gen)
-    chunk = chunk [ (chunk['nBJets']==2) ]
-    row_count = chunk.shape[0]
-
-    weights = chunk['eventweight']
-    input_features = chunk[data_scaler.feature_list()]
-    input_features = floatify(chunk[data_scaler.feature_list()], data_scaler.feature_list())
-    input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
-    scores = model.predict(input_features)
-    n_outputs = scores.shape[1]
-
-    ds = np.array( list(weights), dtype = [('eventweight', float)])
-    for io in range(n_outputs) :
-        ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
-    dtype = ds.dtype
-    row_count = ds.shape[0]
-
-#    with h5py.File(outname, 'w', libver = 'latest') as outfile :
-#
-#        maxshape = (None,) + ds.shape[1:]
-#        dset = outfile.create_dataset("nn_scores", shape = ds.shape, maxshape = maxshape,
-#            chunks = ds.shape, dtype = ds.dtype)
-#
-#        dset[:] = ds
-#
-#        for chunk in gen :
-#
-#            chunk = chunk[ (chunk['nBJets']==2) ]
-#            weights = chunk['eventweight']
-#            input_features = chunk[data_scaler.feature_list()]
-#            #input_features = input_features[ (input_features['nBJets'] == 2 ) ]
-#            input_features = floatify(chunk[data_scaler.feature_list()], data_scaler.feature_list())
-#            input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
-#            
-#            ds = np.array( list(weights), dtype = [('eventweight', float)])
-#            for io in range(n_outputs) :
-#                ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
-#
-#            dset.resize(row_count + ds.shape[0], axis = 0)
-#            dset[row_count:] = ds
-#            row_count += ds.shape[0]
+    #ds = np.array( list(weights), dtype = [('eventweight', float)])
+    #for io in range(n_outputs) :
+    #    ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
+    #dtype = ds.dtype
+    #row_count = ds.shape[0]
 
     dataset_id = 0
     with h5py.File(outname, 'w', libver = 'latest') as outfile :
@@ -190,10 +191,13 @@ def dump_scores(input_file, model, data_scaler, args) :
             input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
             scores = model.predict(input_features)
             n_outputs = scores.shape[1]
+            discriminants = build_discriminant_array(scores, n_outputs)
 
             ds = np.array( list(weights), dtype = [('eventweight', float)])
             for io in range(n_outputs) :
-                ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = float ) 
+                ds = recfunctions.append_fields( ds , names = 'nn_score_{}'.format(io), data = scores[:,io], dtypes = np.float64 ) 
+            for io in range(n_outputs) :
+                ds = recfunctions.append_fields( ds, names = 'nn_disc_{}'.format(io), data = discriminants[io], dtypes = np.float64 )
             maxshape = (None,) + ds.shape[1:]
 
             dsname = "nn_scores_{}".format(dataset_id)
