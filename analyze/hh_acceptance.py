@@ -5,6 +5,7 @@ from __future__ import print_function
 import sys
 import os
 import argparse
+import math
 
 # h5py
 import h5py
@@ -20,13 +21,16 @@ import significance
 
 
 score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/"
+score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8/score_files/"
 ttbar_file = "{}/CENTRAL_410009_scores.h5".format(score_filedir)
 zll_file = "{}/sherpa_zll_scores.h5".format(score_filedir)
 ztt_file = "{}/sherpa_ztt_scores.h5".format(score_filedir)
 wt_file = "{}/wt_bkg_scores.h5".format(score_filedir)
 background_files = [ttbar_file, zll_file, ztt_file, wt_file]
-truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_123456_aug6_custom_scores.h5"
-truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_342053_aug6_scores.h5"
+#truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_123456_aug6_custom_scores.h5"
+#truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_342053_aug6_scores.h5"
+truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8/score_files/wwbb_truth_342053_aug6_scores.h5"
+truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8/score_files/wwbb_truth_123456_aug6_custom_scores.h5"
 
 def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
 
@@ -118,12 +122,12 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
     score_lowbin = 0
     score_highbin = 1
     score_edges = np.concatenate(
-        [[-np.inf], np.linspace(score_lowbin, score_highbin, 101), [np.inf]])
+        [[-np.inf], np.linspace(score_lowbin, score_highbin, 1010), [np.inf]])
     #edges = np.arange(0,1,0.1)
 
     disc_lowbin = -30
     disc_highbin = 20
-    disc_edges = np.concatenate([[-np.inf], np.linspace(disc_lowbin,disc_highbin,202), [np.inf]])
+    disc_edges = np.concatenate([[-np.inf], np.linspace(disc_lowbin,disc_highbin,1010), [np.inf]])
 
 
     score_holders = []
@@ -131,6 +135,9 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
 
 
     for infile in input_files :
+
+        yields_for_process = 0.0
+        weights_for_process = []
 
         with h5py.File(infile, 'r', libver = 'latest') as sample_file :
 
@@ -147,10 +154,9 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
 #                chunks = chunk_generator(infile, dataset_name = dataset_name, chunksize = 1000)
                 chunks = chunk_generator_dataset(input_dataset = input_dataset)
 
-                n_total = 0
                 for chunk in chunks :
 
-                    n_total += chunk.size
+                    #n_total += chunk.size
 
                     if chunk.dtype.names[0] != "eventweight" :
                         print("ERROR dataset is not of expected type (first field is not the eventweight)")
@@ -164,50 +170,96 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
                         sys.exit()
 
                     weights = chunk['eventweight']
-                    class_probs = {}
+                    lumis = np.ones(len(weights)) * 36.1
+                    weights = lumis * weights
+
+                    scores_start_idx = 1
+                    disc_start_idx = 0
+                    for name in score_names :
+                        if 'disc' in name : break
+                        disc_start_idx += 1
+
+                    disc_names = score_names[disc_start_idx:]
+                    score_names = score_names[:disc_start_idx]
+    
+                    scores_by_class = {}
+                    disc_by_class = {}
+
                     for iscore, score_name in enumerate(score_names) :
                         label = int(score_name.split("_")[-1])
-                        scores = chunk[score_name]
-                        class_probs[label] = scores
+                        scores_by_class[label] = chunk[score_name]
+                    for idisc, disc_name in enumerate(disc_names) :
+                        label = int(disc_name.split("_")[-1])
+                        disc_by_class[label] = chunk[disc_name]
 
-                    sig_scores = class_probs[0]
-                    bkg_scores = []
-                    for label in class_probs :
-                        if label == 0 : continue
-                        bkg_scores.append(class_probs[label])
-                    d_sig = get_discriminant(sig_scores, bkg_scores)
+                    p_sig = np.array(scores_by_class[0]) # assume class 0 is signal
+                    d_sig = disc_by_class[0]
 
-                    idx = valid_idx(sig_scores)
-                    valid_scores = sig_scores[idx]
-                    valid_weights = weights[idx]
+                    valid_p = valid_idx(p_sig)
+                    valid_d = valid_idx(d_sig)
+                    idx = valid_p & valid_d
 
-                    idx = valid_scores != 0
-                    valid_scores = valid_scores[idx]
-                    valid_weights = valid_weights[idx]
+                    #n_before = idx.sum()
+                    ## selection on a discriminant
+                    #valid_z = valid_idx( disc_by_class[3] )
+                    #idx = valid_p & valid_d & valid_z
+                    #cut_z_idx = disc_by_class[3] < -20
+                    #idx = idx & cut_z_idx
+                    #n_after = idx.sum()
 
-                    hscore, _ = np.histogram(valid_scores, bins = score_edges, weights = valid_weights)#.reshape((valid_scores.shape[0],)))
+                    valid_w = valid_idx( disc_by_class[2] )
+                    valid_t = valid_idx( disc_by_class[1] )
+                    valid_z = valid_idx( disc_by_class[3] )
+
+                    idx = valid_p & valid_d
+                    idx = idx & valid_w
+                    idx = idx & valid_t
+                    idx = idx & valid_z
+
+                    d_t = disc_by_class[1][idx]
+                    d_w = disc_by_class[2][idx]
+                    d_z = disc_by_class[3][idx]
+
+#                    cut_t_idx = p_t < -1
+#                    cut_w_idx = d_t < -1
+#                    idx = idx & cut_w_idx
+                   # idx = idx & cut_t_idx & cut_w_idx
+
+                    #valid_t = valid_idx( disc_by_class[1] )
+                    #idx = idx & valid_t
+                    #cut_t_idx = disc_by_class[1] < -10
+                    #idx = idx & cut_t_idx
+                    #print("N before Z cut = {}, N after Z cut = {}".format( n_before, n_after ) )
+
+                    p_sig = p_sig[idx]
+                    d_sig = d_sig[idx]
+                    weights = weights[idx]
+
+                    yields_for_process += weights.sum()
+                    weights_for_process.append(weights**2)
+
+                    h_p, _ = np.histogram( p_sig, bins = score_edges, weights = weights )
+                    h_d, _ = np.histogram( d_sig, bins = disc_edges, weights = weights )
 
                     if load_histo_score :
                         load_histo_score = False
-                        histo_score = hscore
+                        histo_score = h_p
                     else :
-                        histo_score += hscore
-
-                    idx = valid_idx(d_sig)
-                    valid_d_sig = d_sig[idx]
-                    valid_weights = weights[idx]
-                    hdisc, _ = np.histogram(valid_d_sig, bins = disc_edges, weights = valid_weights.reshape((valid_d_sig.shape[0],)))
+                        histo_score += h_p
 
                     if load_histo_disc :
                         load_histo_disc = False
-                        histo_disc = hdisc
+                        histo_disc = h_d
                     else :
-                        histo_disc += hdisc
+                        histo_disc += h_d
 
-
+#            weightts_for_process = math.sqrt( np.array(weights_for_process).sum())
+#            print("yield for {0} : {1:.3f} +/- {2:.3f}".format(infile.split("/")[-1], yield_for_process, weights_for_process))
+#            print("yield for {0} : {1:.3f}".format(infile.split("/")[-1], yields_for_process))
     # scores
     yield_by_cut = np.cumsum(histo_score[::-1])[::-1]
     total_yield = histo_score.sum()
+    print("total yield {}".format(total_yield))
     eff_by_cut = yield_by_cut / total_yield
     
     yield_by_cut = yield_by_cut[1:-1]
@@ -259,211 +311,6 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
       
     return score_holders[0], disc_holders[0]
 
-#def count_things(class_probs = None, sample_weights = None, run_disc = False) :
-#
-#    # assume for now that signal is label == 0
-#    print("FUCK class_probs = {}".format(class_probs[0]))
-#    lowbin = 0
-#    highbin = 1
-#    edges = np.concatenate(
-#        [[-np.inf], np.linspace(lowbin, highbin, 505), [np.inf]])
-#    #edges = np.linspace(lowbin, highbin, 505)
-#    #edges = np.arange(0,1,0.01)
-#    #print("edges = {}".format(edges))
-#    #edges = [0,1]
-#    #edges = np.arange(0,1,100)
-#    idx = ~np.isnan(class_probs[0])
-#
-#
-#
-##    idx = valid_idx(class_probs[0])
-#    probs = class_probs[0][idx]
-#    weights = sample_weights[idx]
-#    #weights = sample_weights
-#    #idx = ~np.isnan(sample_weights)
-#    #probs = probs[idx]
-#    #weights = sample_weights[idx]
-#    hscore, _ = np.histogram( list(probs),  bins = edges, weights = weights.reshape((probs.shape[0],)))
-#
-#    # yield as a function of cutvalue
-#    yield_by_cut = np.cumsum( hscore[::-1] )[::-1]
-#    # total yield
-#    total_yield = hscore.sum()
-#    eff_by_cut = yield_by_cut / total_yield
-#    print("total = {}".format(total_yield))
-#    print("cut vals = {}".format(edges))
-#    print("yields   = {}".format(yield_by_cut))
-#    print("eff by cut = {}".format(list(eff_by_cut)))
-#    print("edges = {}, hist = {}".format(len(edges), len(yield_by_cut)))
-#    fig, ax = plt.subplots(1,1)
-#    ax.set_yscale('log')
-#    ax.set_xlim([0,1])
-#    binning = np.arange(0,1,0.02)
-#    centers = (binning[1:-2]+binning[2:-1])/2
-#    idx = ~np.isnan(sample_weights)
-#    sample_weights = sample_weights[idx]
-#    #yields, _ = np.histogram( sample_weights, 1000) #, weights = sample_weights[idx].reshape((class_probs[0][idx].shape[0],)))
-#    yields, _ = np.histogram( class_probs[0][idx], bins = binning, weights = sample_weights[idx].reshape((class_probs[0][idx].shape[0],)))
-#    print("yields = {}".format(yields))
-#    yields = yields / yields.sum()
-#    ax.step(centers, yields[1:-1], label = "yep", where = 'mid')
-#    fig.savefig("test.pdf", bbox_inches = 'tight', dpi = 200)
-#    print("yup")
-#
-#    # trim off the right most edge at the bin edge and remove under/overflow
-#    cutvals = edges[1:-2]
-#    effs = eff_by_cut[1:-1]
-#    for icut, cut in enumerate(cutvals) :
-#        print("score {0:.5f} {1:.5f}".format(cutvals[icut], yield_by_cut[icut]))
-#        #print("score {0:.5f} {1:.5f}".format(cutvals[icut], effs[icut]))
-#
-#    score_holder = AcceptanceHolder(name = "signal", thresholds = cutvals, yields = yield_by_cut, efficiencies = effs)
-#    disc_holder = None
-#
-#    if run_disc :
-#
-#        p_sig = None
-#        p_bkg = []
-#        for label in class_probs :
-#            if label == 0 :
-#                p_sig = class_probs[label]
-#            else :
-#                p_bkg.append(class_probs[label])
-#        d_sig = get_discriminant( signal_prob = p_sig, bkg_probs = p_bkg )
-#
-#        #xmin = np.min(d_sig)
-#        #xmax = np.max(d_sig)
-#        #xmin = int(0.95 * xmin)
-#        #xmax = int(1.05*xmax)
-#        xmin = -40
-#        xmax = 40
-#
-#        edges = np.concatenate(
-#            [[-np.inf], np.linspace(xmin, xmax, 505), [np.inf]])
-#        idx = valid_idx(d_sig)
-#        d_sig = d_sig[idx]
-#        weights = sample_weights[idx]
-#        hdisc, _ = np.histogram( d_sig, bins = edges, weights = weights.reshape((d_sig.shape[0],)))
-#        yields_by_cut = np.cumsum( hdisc[::-1] )[::-1]
-#        total_yield = hdisc.sum()
-#        effs_by_cut = yields_by_cut / total_yield
-#
-#        cutvals = edges[1:-2]
-#        effs = effs_by_cut[1:-1]
-#        for icut, cut in enumerate(cutvals) :
-#            print("disc {0:.5f} {1:.5f}".format(cutvals[icut], effs[icut]))
-#
-#        disc_holder = AcceptanceHolder(name = "signal", thresholds = cutvals, yields = yields_by_cut, efficiencies = effs, is_disc = True)
-#
-#        #xmin = -40
-#        #xmax = 20
-#        #fig, ax = plt.subplots(1,1)
-#        #ax.set_yscale('log')
-#
-#        #edges = np.concatenate(
-#        #    [[-np.inf], np.linspace(xmin, xmax, 505), [np.inf]])
-#        #centers = (edges[1:-2] + edges[2:-1])/2
-#        #yields, _ = np.histogram( d_sig, bins = edges, weights = sample_weights.reshape((class_probs[0].shape[0],)))
-#        #yields = yields / yields.sum()
-#        #ax.step(centers, yields[1:-1], label = 'yep', where = 'mid')
-#        #fig.savefig("test.pdf", bbox_inches = 'tight', dpi = 200)
-#
-#    
-#    #lowbin = 0
-#    #highbin = 1
-#    #edges = np.concatenate(
-#    #    [[-np.inf], np.linspace(lowbin, highbin, 505), [np.inf]])
-#    #hscore, _ = np.histogram( class_probs[0], bins = edges, weights = sample_weights.reshape((class_probs[0].shape[0],)))
-#
-#    ## yield as a function of cutvalue
-#    #yield_by_cut = np.cumsum( hscore[::-1] )[::-1]
-#    ## total yield
-#    #total_yield = hscore.sum()
-#
-#    return score_holder, disc_holder
-#
-#def count_group(score_list = [], weights_list = [], do_disc = False) :
-#
-#    lowbin = 0
-#    highbin = 1
-#    edges = np.concatenate(
-#        [[-np.inf], np.linspace(lowbin, highbin, 505), [np.inf]])
-#
-#    hscore_total = None
-#    load_hist = True
-#
-#    for ibkg, bkg_scores in enumerate(score_list) :
-#
-#        idx = valid_idx(bkg_scores[0])
-#        scores = bkg_scores[0][idx]
-#        weights = weights_list[ibkg][idx]
-#        print("scores {}".format(scores))
-#        hscore, _ = np.histogram( scores, bins = edges, weights = weights.reshape((scores.shape[0],)))
-#        print("hscore {}".format(hscore))
-#        if load_hist :
-#            load_hist = False
-#            hscore_total = hscore
-#            #print("hscore_total {}".format(hscore_total))
-#        else :
-#            hscore += hscore
-#            #print("hscore_total {}".format(hscore_total))
-#    sys.exit()
-#   
-#    yield_by_cut = np.cumsum( hscore_total[::-1] )[::-1]
-#    total_yield = hscore_total.sum()
-#    eff_by_cut = yield_by_cut / total_yield
-#    
-#    cutvals = edges[1:-2]
-#    effs = eff_by_cut[1:-1]
-#
-#    score_holder = AcceptanceHolder(name = "bkg", thresholds = cutvals, yields = yield_by_cut, efficiencies = effs)
-#
-#    disc_holder = None
-#    if do_disc :
-#
-#        hdisc_total = None
-#        load_hist = True
-#
-#        for ibkg, bkg_scores in enumerate(score_list) :
-#            p_sig = None
-#            p_bkg = []
-#            for label in bkg_scores :
-#                if label == 0 :
-#                    p_sig = bkg_scores[label]
-#                else :
-#                    p_bkg.append(bkg_scores[label])
-#            d_sig = get_discriminant( signal_prob = p_sig, bkg_probs = p_bkg )
-#
-#            idx = valid_idx(d_sig)
-#            d_sig = d_sig[idx]
-#            weights = weights_list[ibkg][idx]
-#
-#            xmin = -40
-#            xmax = 40
-#            edges = np.concatenate(
-#                [[-np.inf], np.linspace(xmin, xmax, 505), [np.inf]])
-#            hdisc, _ = np.histogram( d_sig, bins = edges, weights = weights.reshape((d_sig.shape[0],)))
-#            #print("hdisc {}".format(hdisc))
-#
-#            if load_hist :
-#                load_hist = False
-#                hdisc_total = hdisc
-#            else :
-#                hdisc_total += hdisc
-#
-#        yield_by_cut = np.cumsum( hdisc_total[::-1] )[::-1]
-#        total_yield = hdisc_total.sum()
-#        eff_by_cut = yield_by_cut / total_yield
-#
-#        cutvals = edges[1:-2]
-#        effs = eff_by_cut[1:-1]
-#        yield_by_cut = yield_by_cut[1:-1]
-#        print("blah {}".format(yield_by_cut))
-#        sys.exit()
-#        disc_holder = AcceptanceHolder(name = "bkg", thresholds = cutvals, yields = yield_by_cut, efficiencies = effs, is_disc = True)
-#
-#    return score_holder, disc_holder
-
 def get_upperlimit(nbkg = 0) :
 
     if np.isnan(nbkg) :
@@ -492,6 +339,7 @@ def calculate_upperlimits(counts_holder) :
 
     cutvals = counts_holder.thresholds()
     yields = counts_holder.yields()
+    print("UL yields = {}".format(yields[:5]))
 
     yields = np.array(yields)
     #idx = valid_idx(yields) #yields != 0
@@ -502,11 +350,16 @@ def calculate_upperlimits(counts_holder) :
 
     s95_vals = {}
 
+    for idx, cutval in enumerate(cutvals) :
+        print("BLAHBLAH cutval {} = {}".format(cutval, yields[idx]))
+
     for icut, cutval in enumerate(cutvals) :
 
-        #if cutval < 1 : continue
+        #if cutval < 5 : continue
+        if cutval < 5 : continue
+        if cutval > 10 : continue
+        #if cutval < 0.85 : continue
         print("########## cutval = {}".format(cutval))
-        if cutval < 0.85 : continue
 
         nbkg = yields[icut]
 
@@ -519,9 +372,6 @@ def calculate_upperlimits(counts_holder) :
         s95_vals[cutval] = sig_95
 
     return s95_vals
-        
-
-        
 
 def main() :
 
@@ -542,21 +392,76 @@ def main() :
     truth_sig_class_counts, truth_sig_disc_counts = load_file([truth_sig_file], class_dict, sample_type = "sig_truth")
     bkg_class_counts, bkg_disc_counts = load_file(background_files, class_dict, sample_type = 'bkg')
 
-    print("blah {}".format(bkg_class_counts.thresholds()))
-    s95_dict = calculate_upperlimits(bkg_class_counts)
+#    s95_dict = calculate_upperlimits(bkg_class_counts)
+    s95_dict = calculate_upperlimits(bkg_disc_counts)
     print("s95_dict {}".format(s95_dict.keys()))
+
+    lowest_xsec_ul = 99999999
+    best_threshold = 0
+    lumi_factor = 36.1
     for key in s95_dict :
-        cut_idx = sig_class_counts.index_of_threshold(key)
-        truth_counts = truth_sig_class_counts.yields()[cut_idx]
-        reco_eff = sig_class_counts.yields()[cut_idx] 
+        # use disc
+        cut_idx = sig_disc_counts.index_of_threshold(key)
+        truth_counts = truth_sig_disc_counts.yields()[cut_idx]
+
+        acceptance = truth_counts / (590 * lumi_factor) #  * 36.1)
+        reco_eff = sig_disc_counts.yields()[cut_idx]
         reco_eff = reco_eff / truth_counts
-#        sig_eff = sig_class_counts.efficiencies()[cut_idx]
-#        sig_eff = sig_class_counts.yields()[cut_idx]
-        sig_acc = truth_sig_class_counts.efficiencies()[cut_idx]
-        br = 0.24        
-        print(" CUT {} N = {} -> e x A x BR = {} x {} x BR = {} (BKG = {}, SIG = {})".format(key, s95_dict[key], reco_eff, sig_acc, reco_eff * sig_acc * br, bkg_class_counts.yields()[cut_idx], sig_class_counts.yields()[cut_idx]))
+        e_times_a = reco_eff * acceptance
+        #e_times_a = sig_disc_counts.yields()[cut_idx] / (590)
+        br = 2 * 0.57 * 0.21 
+        print(50 * "-")
+        print("CUT VAL = {}".format(key))
+        print("n bkg = {}".format(bkg_disc_counts.yields()[cut_idx]))
+        print("acceptance = {}, efficiency {} : e x A = {}".format(acceptance, reco_eff, acceptance * reco_eff))
+        n_sig_ul = s95_dict[key]
+        xsec_ul = n_sig_ul / lumi_factor
+        xsec_ul = xsec_ul / ( br * e_times_a )
+        if xsec_ul < lowest_xsec_ul and xsec_ul > 0 :
+            lowest_xsec_ul = xsec_ul
+            best_threshold = key
+        print(" ->> S95 = {} ==> xsec UL = {}".format(n_sig_ul, xsec_ul))
+
+
+
+        # usc scores
+ #       cut_idx = sig_class_counts.index_of_threshold(key)
+ #       truth_counts = truth_sig_class_counts.yields()[cut_idx]
+ #       acceptance = truth_counts / (590 * lumi_factor)
+ #       reco_eff = sig_class_counts.yields()[cut_idx]
+ #       reco_eff = reco_eff / truth_counts
+ #       e_times_a = reco_eff * acceptance
+ #       br = 2 * 0.57 * 0.21
+ #       print(50 * "-")
+ #       print("CUT VAL = {}".format(key))
+ #       print("n bkg = {}".format(bkg_class_counts.yields()[cut_idx]))
+ #       print("acceptance = {}, efficiency {} : e x A = {}".format(acceptance, reco_eff, acceptance * reco_eff))
+ #       n_sig_ul = s95_dict[key]
+ #       xsec_ul = n_sig_ul / lumi_factor
+ #       xsec_ul = xsec_ul / ( br * e_times_a )
+ #       if xsec_ul < lowest_xsec_ul :
+ #           if xsec_ul > 0 :
+ #               lowest_xsec_ul = xsec_ul
+ #               best_threshold = key
+ #       print(" ->> S95 = {} ==> xsec UL = {}".format(n_sig_ul, xsec_ul))
+        
+        
+
+
+    #    cut_idx = sig_class_counts.index_of_threshold(key)
+    #    truth_counts = truth_sig_class_counts.yields()[cut_idx]
+    #    reco_eff = sig_class_counts.yields()[cut_idx] 
+    #    reco_eff = reco_eff / truth_counts
+#   #     sig_eff = sig_class_counts.efficiencies()[cut_idx]
+#   #     sig_eff = sig_class_counts.yields()[cut_idx]
+    #    sig_acc = truth_sig_class_counts.efficiencies()[cut_idx]
+    #    br = 0.24        
+    #    print(" CUT {} N = {} -> e x A x BR = {} x {} x BR = {} (BKG = {}, SIG = {})".format(key, s95_dict[key], reco_eff, sig_acc, reco_eff * sig_acc * br, bkg_class_counts.yields()[cut_idx], sig_class_counts.yields()[cut_idx]))
 
         #print("key {} -> idx {}, idx {} == S95 = {}".format(key, sig_disc_counts.index_of_threshold(key), truth_sig_disc_counts.index_of_threshold(key), s95_dict[key]))
+
+    print(59 * "*")
+    print("LIMIT ON XSEC = {} at threshold {}".format(lowest_xsec_ul, best_threshold))
     
 
 if __name__ == "__main__" :
