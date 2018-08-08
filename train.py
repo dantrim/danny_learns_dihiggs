@@ -5,6 +5,7 @@ import sys
 import os
 from time import time
 from preprocess import mkdir_p, unique_filename
+import pickle
 
 # h5py
 import h5py
@@ -48,6 +49,8 @@ class Sample :
 
         if class_label < 0 :
             raise ValueError("ERROR Sample (={})class label is not set (<0)".format(name, class_label))
+
+        print("Creating sample {} (label = {})".format(name, class_label))
 
         self._name = name
         self._class_label = class_label
@@ -224,17 +227,24 @@ def build_keras_model( n_inputs, n_outputs ) :
     layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
 
     input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
-    x = Dense( n_nodes*2, **layer_opts ) (input_layer)
-    x = Dense( n_nodes*2, **layer_opts ) (input_layer)
-    x = Dropout(0.5)(x)
+    x = Dense( n_nodes, **layer_opts ) (input_layer)
+    x = Dropout(0.1)(x)
     x = Dense( n_nodes, **layer_opts ) (x)
+    x = Dropout(0.1)(x)
+    x = Dense( 30, **layer_opts ) (x)
+    #x = Dense( 10, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dropout(0.2)(x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
     predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
 
     model = Model(inputs = input_layer, outputs = predictions)
-    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.01, nesterov = True), metrics = ['categorical_accuracy'] )
+    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.4, momentum = 0.05,decay=0.001, nesterov = True), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
-    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
-    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.002, decay=0.1), metrics = ['categorical_accuracy'] )
+    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.004, decay=0.05), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
 
     return model
@@ -245,10 +255,43 @@ def train(n_classes, input_features, targets, model) :
     targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
 
     # fit
-    fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 4000)
+    fit_history = model.fit(input_features, targets_encoded, epochs = 200, validation_split = 0.2, shuffle = True, batch_size = 4000)
     #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
 
     return model, fit_history
+
+#def build_keras_model( n_inputs, n_outputs ) :
+#
+#    n_nodes = 100
+#    do_frac = 0.5
+#    layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
+#
+#    input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+#    x = Dense( n_nodes*2, **layer_opts ) (input_layer)
+#    x = Dense( n_nodes*2, **layer_opts ) (input_layer)
+#    x = Dropout(0.5)(x)
+#    x = Dense( n_nodes, **layer_opts ) (x)
+#    predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
+#
+#    model = Model(inputs = input_layer, outputs = predictions)
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.01, nesterov = True), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
+#    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.002, decay=0.1), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+#
+#    return model
+#
+#def train(n_classes, input_features, targets, model) :
+#
+#    # encode the targets
+#    targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+#
+#    # fit
+#    fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 4000)
+#    #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
+#
+#    return model, fit_history
 
 def main() :
 
@@ -273,6 +316,10 @@ def main() :
 
     # TODO : save the fit_history object for later use
     model, fit_history = train(len(training_samples), input_features, targets, model)
+
+    # dump the fit history to file for later use
+    with open("fit_history_{}.pkl".format(args.name), 'wb') as pickle_history :
+        pickle.dump( fit_history.history, pickle_history )
 
     # save
     job_suff = "_{}".format(args.name) if args.name else ""
