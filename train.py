@@ -245,20 +245,22 @@ def build_combined_input(training_samples, data_scaler = None, scale = True, reg
 
 def build_keras_model( n_inputs, n_outputs ) :
 
-    n_nodes = 600
+    n_nodes = 1000
     do_frac = 0.5
     layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
 
     input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
     x = Dense( n_nodes, **layer_opts ) (input_layer)
-    x = Dropout(0.5)(x)
+    x = Dropout(0.8)(x)
     x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( 30, **layer_opts ) (x)
     #x = Dense( n_nodes, **layer_opts ) (x)
 #    x = Dropout(0.3)(x)
     #x = Dense( n_nodes, **layer_opts ) (x)
     x = Dropout(0.5)(x)
     #x = Dense( n_nodes, **layer_opts ) (x)
     x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
   #  x = Dropout(0.5)(x)
  #   x = Dense( n_nodes, **layer_opts ) (x)
     #x = Dense( n_nodes, **layer_opts ) (x)
@@ -268,7 +270,7 @@ def build_keras_model( n_inputs, n_outputs ) :
     predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
 
     model = Model(inputs = input_layer, outputs = predictions)
-    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.0005, nesterov = True), metrics = ['categorical_accuracy'] )
+    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.15, momentum = 0.02,decay=0.0005, nesterov = True), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.004, decay=0.05), metrics = ['categorical_accuracy'] )
@@ -284,7 +286,7 @@ def train(n_classes, input_features, targets, model, regression_targets = []) :
     # fit
     fit_history = None
     if len(regression_targets) == 0 :
-        fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 15000)
+        fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 10000)
     else :
         fit_history = model.fit(input_features, [targets_encoded, regression_targets], epochs = 100, validation_split = 0.2, shuffle = True, batch_size = 9000)
 
