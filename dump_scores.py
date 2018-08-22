@@ -107,7 +107,7 @@ def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
     with h5py.File(input_file, 'r', libver = 'latest') as f :
         dataset = f[dataset_name]
 
-        if "CENTRAL" and "123456" in input_file :
+        if "CENTRAL" in input_file and "123456" in input_file :
             n_skip = 19504
             print("FOR {} ONLY CONSIDERING EVENTS AFTER THE {}'th EVENT".format(input_file, n_skip))
             yield dataset[n_skip:]
@@ -193,11 +193,12 @@ def dump_scores(input_file, model, data_scaler, args) :
         for chunk in chunk_generator(input_file, dataset_name = args.dataset) :
 
             # apply the selection here
-            chunk = chunk[ chunk['nBJets'] >= 1 ]
+            chunk = chunk[ (chunk['nBJets'] >= 1) & (chunk['mt2_bb'] > 65) ]
+            if chunk.size == 0 : continue
 
             weights = chunk['eventweight']
             input_features = chunk[data_scaler.feature_list()]
-            input_features = floatify(chunk[data_scaler.feature_list()], data_scaler.feature_list())
+            input_features = floatify(input_features, data_scaler.feature_list())
             input_features = (input_features - data_scaler.mean()) / data_scaler.scale()
             scores = model.predict(input_features)
             n_outputs = scores.shape[1]

@@ -22,6 +22,7 @@ bkg_files = [ "{}/{}".format(filedir, fname) for fname in bkg_filenames ]
 
 reco_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/CENTRAL_342053.h5"
 truth_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/wwbb_truth_342053_aug6.h5"
+#truth_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/wwbb_truth_123456_aug6_custom.h5"
 
 lumi_factor = 36.1
 
@@ -83,7 +84,7 @@ def calculate_upperlimit(bkg_counts) :
 
     # scan until we hit the 95% confidence exlusion
     while True :
-        z = significance.binomial_exp_z(sig, bkg_counts, 0.38)
+        z = significance.binomial_exp_z(sig, bkg_counts, 0.365)
         if z >= 1.64 : break
         if sig > 100 :
             sig = -1

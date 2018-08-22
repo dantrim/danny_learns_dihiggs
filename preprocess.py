@@ -264,15 +264,18 @@ def preprocess_file(input_file, input_group, train_size, args) :
 
     with h5py.File(input_file.filepath, 'r', libver = 'latest') as infile :
         ds = infile[args.dataset_name]
-        if len(feature_list) > 0 :
-            ds = ds[tuple(feature_list)]
 
         # hardcode the selection
-        indices = (ds['nBJets'] == 2)# & (ds['met']>45)
+        indices = (ds['nBJets'] >= 1)# & (ds['mt2_bb'] > 50)
         ds = ds[indices]
+
+        if len(feature_list) > 0 :
+#            ds = ds[tuple(feature_list)]
+            ds = ds[feature_list]
 
         if input_file.label == 0 and train_size < 0 :
             train_size = int(float(ds.size) / 2.0)
+            print("training size =  {}".format(train_size))
             if args.training_size != 0 :
                 train_size = int(args.training_size)
         elif input_file.label != 0 and train_size < 0 :

@@ -55,6 +55,7 @@ class Sample :
         self._name = name
         self._class_label = class_label
         self._input_data = input_data
+        self._regression_inputs = None
 
     def name(self) :
         return self._name
@@ -62,6 +63,12 @@ class Sample :
         return self._class_label
     def data(self) :
         return self._input_data
+    @property
+    def regression_inputs(self) :
+        return self._regression_inputs
+    @regression_inputs.setter
+    def regression_inputs(self, data) :
+        self._regression_inputs = data
         
 
 
@@ -167,6 +174,11 @@ def load_input_file(args) :
     found_scalings = False
     samples = []
     data_scaler = None
+
+    features_to_ignore = ["eventweight"]
+    if args.regress != "" :
+        features_to_ignore.append(args.regress)
+
     with h5py.File(args.input, 'r', libver = 'latest') as input_file :
 
         # look up the scalings first, in order to build the feature list used for the Sample creation
@@ -174,7 +186,7 @@ def load_input_file(args) :
             found_scalings = True
             scaling_group = input_file[scaling_group_name]
             scaling_dataset = scaling_group[scaling_data_name]
-            data_scaler = DataScaler( scaling_dataset = scaling_dataset, ignore_features = ['eventweight'] )
+            data_scaler = DataScaler( scaling_dataset = scaling_dataset, ignore_features = features_to_ignore )
             print("DataScaler found {} features to train on (there were {} total features in the input)".format( len(data_scaler.feature_list()), len(data_scaler.raw_feature_list() )))
         else :
             print("scaling group (={}) not found in file".format(scaling_group_name))
@@ -189,6 +201,8 @@ def load_input_file(args) :
                 class_label = process_group.attrs['training_label']
                 s = Sample(name = p, class_label = int(class_label),
                     input_data = floatify( process_group['train_features'][tuple(data_scaler.feature_list())], data_scaler.feature_list() ) )
+                if args.regress :
+                    s.regression_inputs = floatify( process_group['train_features'][tuple( [args.regress] )], [args.regress] )
                 samples.append(s)
 
         else :
@@ -199,7 +213,7 @@ def load_input_file(args) :
 
     return samples, data_scaler
 
-def build_combined_input(training_samples, data_scaler = None, scale = True) :
+def build_combined_input(training_samples, data_scaler = None, scale = True, regress_var = "") :
 
     targets = []
     # used extended slicing to partition arbitrary number of samples
@@ -218,11 +232,20 @@ def build_combined_input(training_samples, data_scaler = None, scale = True) :
         inputs = (inputs - data_scaler.mean()) / data_scaler.scale()
 
     targets = np.array(targets, dtype = int )
-    return inputs, targets
+
+    regress_targets = []
+    if regress_var != "" :
+        regress_targets.extend( sample0.regression_inputs )
+        regress_targets.extend( sample1.regression_inputs )
+        for sample in other :
+            regress_targets.extend( sample.regression_inputs )
+        regress_targets = np.array( regress_targets, dtype = np.float64 )
+
+    return inputs, targets, regress_targets
 
 def build_keras_model( n_inputs, n_outputs ) :
 
-    n_nodes = 200
+    n_nodes = 600
     do_frac = 0.5
     layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
 
@@ -230,24 +253,22 @@ def build_keras_model( n_inputs, n_outputs ) :
     x = Dense( n_nodes, **layer_opts ) (input_layer)
     x = Dropout(0.5)(x)
     x = Dense( n_nodes, **layer_opts ) (x)
-    x = Dense( n_nodes, **layer_opts ) (x)
-    x = Dense( n_nodes, **layer_opts ) (x)
-   # x = Dense( n_nodes, **layer_opts ) (x)
-    x = Dropout(0.1)(x)
-   # x = Dense( n_nodes, **layer_opts ) (x)
-   # x = Dense( n_nodes, **layer_opts ) (x)
-   # x = Dropout(0.1)(x)
-   # x = Dense( 30, **layer_opts ) (x)
-    #x = Dense( 10, **layer_opts ) (x)
     #x = Dense( n_nodes, **layer_opts ) (x)
-    #x = Dropout(0.2)(x)
+#    x = Dropout(0.3)(x)
     #x = Dense( n_nodes, **layer_opts ) (x)
+    x = Dropout(0.5)(x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    x = Dense( n_nodes, **layer_opts ) (x)
+  #  x = Dropout(0.5)(x)
+ #   x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dense( n_nodes, **layer_opts ) (x)
+    #x = Dropout(0.3)(x)
     #x = Dense( n_nodes, **layer_opts ) (x)
     #x = Dense( n_nodes, **layer_opts ) (x)
     predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
 
     model = Model(inputs = input_layer, outputs = predictions)
-    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.1, momentum = 0.05,decay=0.001, nesterov = True), metrics = ['categorical_accuracy'] )
+    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.0005, nesterov = True), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
     #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.004, decay=0.05), metrics = ['categorical_accuracy'] )
@@ -255,16 +276,93 @@ def build_keras_model( n_inputs, n_outputs ) :
 
     return model
 
-def train(n_classes, input_features, targets, model) :
+def train(n_classes, input_features, targets, model, regression_targets = []) :
 
     # encode the targets
     targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
 
     # fit
-    fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 9000)
-    #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
+    fit_history = None
+    if len(regression_targets) == 0 :
+        fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 15000)
+    else :
+        fit_history = model.fit(input_features, [targets_encoded, regression_targets], epochs = 100, validation_split = 0.2, shuffle = True, batch_size = 9000)
 
     return model, fit_history
+
+def build_keras_model_regression( n_inputs, n_outputs ) :
+
+    n_nodes = 200
+    layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
+
+    input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+    d0 = Dense( n_nodes, **layer_opts ) (input_layer)
+    d0 = Dropout(0.5)(d0)
+    d1 = Dense( n_nodes, **layer_opts )(d0)
+    #d1 = Dropout(0.1)(d1)
+    d2 = Dense( n_nodes, **layer_opts )(d1)
+    #d2 = Dropout(0.1)(d2)
+    d3 = Dense( n_nodes, **layer_opts )(d2)
+
+    r0 = Dense(10, **layer_opts) (d2)
+    #r1 = Dense(10, **layer_opts) (r0)
+
+    classifier_predictions = Dense( n_outputs, activation = 'softmax', name = "ClassifierOutputLayer" )(d2)
+    regression_predictions = Dense(1) (r0)
+
+    model = Model( inputs = input_layer, outputs = [classifier_predictions, regression_predictions] )
+    #model.compile( loss = ['categorical_crossentropy', 'mse'], optimizer = keras.optimizers.SGD(lr=0.1, momentum = 0.05,decay=0.01, nesterov = True), metrics = ['categorical_accuracy', 'mae'] )
+    #model.compile( loss = ['categorical_crossentropy','mse'], optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.004, decay=0.01), metrics = ['categorical_accuracy', 'mae'] )
+    model.compile(loss = ['categorical_crossentropy', 'mse'], optimizer = 'adam', metrics = ['categorical_accuracy', 'mae'])
+
+    return model
+
+#def build_keras_model( n_inputs, n_outputs ) :
+#
+#    n_nodes = 200
+#    do_frac = 0.5
+#    layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
+#
+#    input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+#    x = Dense( n_nodes, **layer_opts ) (input_layer)
+#    x = Dropout(0.5)(x)
+#    x = Dense( n_nodes, **layer_opts ) (x)
+#    x = Dense( n_nodes, **layer_opts ) (x)
+#    x = Dense( n_nodes, **layer_opts ) (x)
+#   # x = Dense( n_nodes, **layer_opts ) (x)
+#    x = Dropout(0.1)(x)
+#   # x = Dense( n_nodes, **layer_opts ) (x)
+#   # x = Dense( n_nodes, **layer_opts ) (x)
+#   # x = Dropout(0.1)(x)
+#   # x = Dense( 30, **layer_opts ) (x)
+#    #x = Dense( 10, **layer_opts ) (x)
+#    #x = Dense( n_nodes, **layer_opts ) (x)
+#    #x = Dropout(0.2)(x)
+#    #x = Dense( n_nodes, **layer_opts ) (x)
+#    #x = Dense( n_nodes, **layer_opts ) (x)
+#    #x = Dense( n_nodes, **layer_opts ) (x)
+#    predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
+#
+#    model = Model(inputs = input_layer, outputs = predictions)
+#    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.1, momentum = 0.05,decay=0.001, nesterov = True), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=False, lr = 0.004, decay=0.05), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+#
+#    return model
+#
+#def train(n_classes, input_features, targets, model) :
+#
+#    # encode the targets
+#    targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+#
+#    # fit
+#    fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 9000)
+#    #fit_history = model.fit(input_features, targets_encoded, epochs = 30, validation_split = 0.2, shuffle = True, batch_size = 4750)
+#
+#    return model, fit_history
+
 #def build_keras_model( n_inputs, n_outputs ) :
 #
 #    n_nodes = 100
@@ -348,6 +446,7 @@ def main() :
     parser.add_argument("-n", "--name", help = "Provide output filename descriptor", default = "test")
     parser.add_argument("-v", "--verbose", action = "store_true", default = False,
         help = "Be loud about it")
+    parser.add_argument("--regress", help = "Provide a variable to regress on", default = "")
     args = parser.parse_args()
 
     training_samples, data_scaler = load_input_file(args)
@@ -356,11 +455,19 @@ def main() :
         sys.exit()
     print("Pre-processed file contained {} samples: {}, {}".format(len(training_samples), [s.name() for s in training_samples], [s.class_label() for s in training_samples]))
 
-    input_features, targets = build_combined_input(training_samples, data_scaler = data_scaler, scale = True)
-    model = build_keras_model( len(data_scaler.feature_list()), len(training_samples) )
+    input_features, targets, regression_targets = build_combined_input(training_samples, data_scaler = data_scaler, scale = True, regress_var = args.regress)
+
+    if len(regression_targets) == 0 :
+        regression_targets = []
+
+    model = None
+    if args.regress == "" :
+        model = build_keras_model( len(data_scaler.feature_list()), len(training_samples) )
+    else :
+        model = build_keras_model_regression( len(data_scaler.feature_list()), len(training_samples) )
 
     # TODO : save the fit_history object for later use
-    model, fit_history = train(len(training_samples), input_features, targets, model)
+    model, fit_history = train(len(training_samples), input_features, targets, model, regression_targets = regression_targets)
 
     # dump the fit history to file for later use
     with open("fit_history_{}.pkl".format(args.name), 'wb') as pickle_history :

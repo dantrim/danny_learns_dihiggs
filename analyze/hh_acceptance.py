@@ -21,7 +21,7 @@ import significance
 
 
 score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/"
-score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8/score_files/"
+score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8_2/score_files/"
 ttbar_file = "{}/CENTRAL_410009_scores.h5".format(score_filedir)
 zll_file = "{}/sherpa_zll_scores.h5".format(score_filedir)
 ztt_file = "{}/sherpa_ztt_scores.h5".format(score_filedir)
@@ -29,8 +29,8 @@ wt_file = "{}/wt_bkg_scores.h5".format(score_filedir)
 background_files = [ttbar_file, zll_file, ztt_file, wt_file]
 #truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_123456_aug6_custom_scores.h5"
 #truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_342053_aug6_scores.h5"
-truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8/score_files/wwbb_truth_342053_aug6_scores.h5"
-truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8/score_files/wwbb_truth_123456_aug6_custom_scores.h5"
+truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8_2/score_files/wwbb_truth_342053_aug6_scores.h5"
+truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8_2/score_files/wwbb_truth_123456_aug6_custom_scores.h5"
 
 def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
 
@@ -199,26 +199,29 @@ def load_file(input_files = [], class_dict = {}, sample_type = "") :
                     valid_d = valid_idx(d_sig)
                     idx = valid_p & valid_d
 
-                    #n_before = idx.sum()
-                    ## selection on a discriminant
+                    n_before = idx.sum()
+                    # selection on a discriminant
                     #valid_z = valid_idx( disc_by_class[3] )
                     #idx = valid_p & valid_d & valid_z
                     #cut_z_idx = disc_by_class[3] < -20
                     #idx = idx & cut_z_idx
                     #n_after = idx.sum()
 
-                    valid_w = valid_idx( disc_by_class[2] )
-                    valid_t = valid_idx( disc_by_class[1] )
-                    valid_z = valid_idx( disc_by_class[3] )
+                    #valid_w = valid_idx( disc_by_class[2] )
+                    #valid_t = valid_idx( disc_by_class[1] )
+                    #valid_z = valid_idx( disc_by_class[3] )
 
-                    idx = valid_p & valid_d
-                    idx = idx & valid_w
-                    idx = idx & valid_t
-                    idx = idx & valid_z
+                    #idx = valid_p & valid_d
+                    ##idx = idx & valid_w
+                    ##idx = idx & valid_t
+                    #idx = idx & valid_z
 
-                    d_t = disc_by_class[1][idx]
-                    d_w = disc_by_class[2][idx]
-                    d_z = disc_by_class[3][idx]
+                    #d_t = disc_by_class[1][idx]
+                    #d_w = disc_by_class[2][idx]
+                    #d_z = disc_by_class[3][idx]
+
+                    #cut_z_idx = d_z < -10
+                    #idx = idx & cut_z_idx
 
 #                    cut_t_idx = p_t < -1
 #                    cut_w_idx = d_t < -1
@@ -322,7 +325,7 @@ def get_upperlimit(nbkg = 0) :
 
     while True :
 
-        z = significance.binomial_exp_z(sig, nbkg, 0.3)
+        z = significance.binomial_exp_z(sig, nbkg, 0.33)
 
         if z > 1.64 :
             break
@@ -411,10 +414,10 @@ def main() :
         #e_times_a = sig_disc_counts.yields()[cut_idx] / (590)
         br = 2 * 0.57 * 0.21 
         print(50 * "-")
+        n_sig_ul = s95_dict[key]
         print("CUT VAL = {}".format(key))
         print("n bkg = {}".format(bkg_disc_counts.yields()[cut_idx]))
-        print("acceptance = {}, efficiency {} : e x A = {}".format(acceptance, reco_eff, acceptance * reco_eff))
-        n_sig_ul = s95_dict[key]
+        print("S95 = {}, acceptance = {}, efficiency {} : e x A = {}".format(n_sig_ul, acceptance, reco_eff, acceptance * reco_eff))
         xsec_ul = n_sig_ul / lumi_factor
         xsec_ul = xsec_ul / ( br * e_times_a )
         if xsec_ul < lowest_xsec_ul and xsec_ul > 0 :
