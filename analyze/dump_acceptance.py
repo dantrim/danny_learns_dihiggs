@@ -28,7 +28,7 @@ def dump(args) :
 
     print("args = {}".format(args))
 
-    input_files = [args.input]
+    input_files = args.input
 
     dataset_name = 'nn_scores'
 
@@ -155,6 +155,8 @@ def main() :
     parser.add_argument("-s", "--suffix", help = "Provie a suffix to append to any outputs", default = "")
     args = parser.parse_args()
 
+    args.input = args.input.split(",")
+    print("loading {} inputs".format(len(args.input)))
     dump(args)
 
 if __name__ == "__main__" :
