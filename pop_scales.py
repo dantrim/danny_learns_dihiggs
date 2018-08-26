@@ -40,14 +40,42 @@ def extract_scale_dataset(args, ignore_features = ['eventweight']) :
                 scaling dataset".format(args.input))
 
         output_name = args.input.split("/")[-1].replace(".h5","").replace(".hdf5","")
-        output_name += "_scaling_data.h5"
+        output_name += "_scaling_data"
         if args.outdir != "" :
             mkdir_p(args.outdir)
         output_name = "{}/{}".format(args.outdir, output_name)
-        
-#        if args.output != "" :
-#            output_name = args.output
 
+        print("scaling datatype fields = {}".format(scaling_dataset.dtype.fields.keys()))
+
+        if args.to_json :
+            output_json_name = output_name + ".json"
+
+            # the fields are named in a specific way, if they are not there
+			# as expected then exit
+            if 'name' not in scaling_dataset.dtype.fields.keys() :
+            	print("ERROR 'name' field not in scaling dataset")
+            	sys.exit()
+            if 'mean' not in scaling_dataset.dtype.fields.keys() :
+            	print("ERROR 'mean' field not in scaling dataset")
+            	sys.exit()
+            if 'scale' not in scaling_dataset.dtype.fields.keys() :
+            	print("ERROR 'scale' field not in scaling dataset")
+            	sys.exit()
+            
+            import json
+            variables = scaling_dataset['name']
+            scales = scaling_dataset['scale']
+            offsets = scaling_dataset['mean']
+            
+            jdata = {}
+            jdata["variables"] = []
+            for ivar, varname in enumerate(variables) :
+            	jdata["variables"].append( { "name" : varname, "offset" : offsets[ivar], "scale" : scales[ivar] } )
+            
+            with open(output_json_name, 'w') as jsonfile :
+            	json.dump(jdata, jsonfile)
+
+        output_name += ".h5"
         with h5py.File(output_name, 'w', libver = 'latest') as output_file :
             scaling_group = output_file.create_group(scaling_group_name)
 
@@ -69,6 +97,8 @@ def main() :
         based on input filename)", default = "")
     parser.add_argument("--outdir", help = "Provide an output directory to store the output", 
         default = "./")
+    parser.add_argument("-j", "--to-json", help = "Dump the variable scaling information\
+		to JSON (for, e.g., LWTNN)", default = False, action = "store_true")
     args = parser.parse_args()
 
     extract_scale_dataset(args)
