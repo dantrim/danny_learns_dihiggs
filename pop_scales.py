@@ -45,8 +45,6 @@ def extract_scale_dataset(args, ignore_features = ['eventweight']) :
             mkdir_p(args.outdir)
         output_name = "{}/{}".format(args.outdir, output_name)
 
-        print("scaling datatype fields = {}".format(scaling_dataset.dtype.fields.keys()))
-
         if args.to_json :
             output_json_name = output_name + ".json"
 
