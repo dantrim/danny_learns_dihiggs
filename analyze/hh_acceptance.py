@@ -22,6 +22,7 @@ import significance
 
 score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/"
 score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8_2/score_files/"
+score_filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug22/scores/"
 ttbar_file = "{}/CENTRAL_410009_scores.h5".format(score_filedir)
 zll_file = "{}/sherpa_zll_scores.h5".format(score_filedir)
 ztt_file = "{}/sherpa_ztt_scores.h5".format(score_filedir)
@@ -31,6 +32,8 @@ background_files = [ttbar_file, zll_file, ztt_file, wt_file]
 #truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/score_files2/wwbb_truth_342053_aug6_scores.h5"
 truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8_2/score_files/wwbb_truth_342053_aug6_scores.h5"
 truth_sig_file = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/ml_inputs_aug8_2/score_files/wwbb_truth_123456_aug6_custom_scores.h5"
+truth_sig_file = "{}/wwbb_truth_123456_aug6_custom_scores.h5".format(score_filedir)
+truth_sig_file = "{}/wwbb_truth_123456_aug23_scores.h5".format(score_filedir)
 
 def chunk_generator(input_file, chunksize = 100000, dataset_name = "") :
 
@@ -359,7 +362,7 @@ def calculate_upperlimits(counts_holder) :
     for icut, cutval in enumerate(cutvals) :
 
         #if cutval < 5 : continue
-        if cutval < 5 : continue
+        if cutval < 2 : continue
         if cutval > 10 : continue
         #if cutval < 0.85 : continue
         print("########## cutval = {}".format(cutval))
@@ -407,12 +410,16 @@ def main() :
         cut_idx = sig_disc_counts.index_of_threshold(key)
         truth_counts = truth_sig_disc_counts.yields()[cut_idx]
 
-        acceptance = truth_counts / (590 * lumi_factor) #  * 36.1)
+        acceptance_denominator =  590.001 * 1.0 * 36.1 # 590.001 weighted events in the 132k raw EVNT events, xsec taken as 0.59 pb, normalized to L = 1/fb (multiply by 36.1 since the numerator counts are normalized to 36.1/fb
+        acceptance = truth_counts / acceptance_denominator
+        #acceptance = truth_counts / (590 * lumi_factor) #  * 36.1)
         reco_eff = sig_disc_counts.yields()[cut_idx]
         reco_eff = reco_eff / truth_counts
         e_times_a = reco_eff * acceptance
         #e_times_a = sig_disc_counts.yields()[cut_idx] / (590)
-        br = 2 * 0.57 * 0.21 
+#        br = 2 * 0.57 * 0.21 
+#        br = 0.343 * 0.303
+        br = 0.365 * 0.242 # 0.08833
         print(50 * "-")
         n_sig_ul = s95_dict[key]
         print("CUT VAL = {}".format(key))

@@ -41,3 +41,15 @@ doc/doxygen/
 *.swo
 *.swp
 *.swn
+
+# images
+*.eps
+*.pdf
+*.png
+
+# ROOT
+*.root
+
+# HDF5
+*.h5
+*.hdf5

@@ -20,9 +20,11 @@ filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/"
 bkg_filenames = ["sherpa_zll.h5", "sherpa_ztt.h5", "wt_bkg.h5", "CENTRAL_410009.h5"]
 bkg_files = [ "{}/{}".format(filedir, fname) for fname in bkg_filenames ]
 
-reco_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/CENTRAL_342053.h5"
-truth_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/wwbb_truth_342053_aug6.h5"
+#reco_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/CENTRAL_342053.h5"
+#truth_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/wwbb_truth_342053_aug6.h5"
 #truth_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/wwbb_truth_123456_aug6_custom.h5"
+reco_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/CENTRAL_123456.h5"
+truth_sig = "/Users/dantrim/workarea/physics_analysis/wwbb/ml_training/samples/wwbb_truth_123456_aug23.h5"
 
 lumi_factor = 36.1
 
@@ -112,18 +114,33 @@ def main() :
     reco_sig_yields = get_yields([reco_sig])
     truth_sig_yields = get_yields([truth_sig], 'truth')
 
+
     #e_times_a = reco_sig_yields / truth_sig_yields
-    acceptance = truth_sig_yields / (590.0 * 36.1)
-    print("A  = {}".format(acceptance))
+    acceptance_den = 21298.8
+#    acceptance = truth_sig_yields / (590.0 * 36.1)
+    acceptance = truth_sig_yields / acceptance_den
+#    print("A  = {}".format(acceptance))
     efficiency = reco_sig_yields / truth_sig_yields
-    print("E = {}".format(efficiency))
+#    print("E = {}".format(efficiency))
     e_times_a = acceptance * efficiency
 
-    print(50 * "=")
-    print("e x A = {}".format(e_times_a))
+#    print(50 * "=")
+#    print("e x A = {}".format(e_times_a))
 
     xsec_ul = n_sig_ul / 36.1
-    xsec_ul = xsec_ul / (e_times_a * 2.0 * 0.57 * 0.21)
+
+    den = e_times_a
+    kinematic_efficiency = 0.23849
+    kinematic_efficiency /= 0.5
+    w_lnu_efficiency = 0.3272**2
+    den *= kinematic_efficiency * w_lnu_efficiency
+    den *= 2 * 0.57 * 0.21
+
+    xsec_ul /= den
+
+    sig_with_br = reco_sig_yields * kinematic_efficiency * w_lnu_efficiency
+    print("Zn for signal yield (={}) and bkg yield (={}) = {}".format(sig_with_br, total_bkg_yield, significance.binomial_exp_z(sig_with_br, total_bkg_yield, 0.365))) 
+    
     print("xsec UL = {}".format(xsec_ul))
     
 

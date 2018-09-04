@@ -99,6 +99,8 @@ def dump(args) :
                     p_sig = p_sig[valid_indices]
                     d_sig = d_sig[valid_indices]
 
+                    weights = weights[valid_indices]
+
                     h_p, _ = np.histogram( p_sig, bins = score_edges, weights = weights )
                     h_d, _ = np.histogram( d_sig, bins = disc_edges, weights = weights )
 

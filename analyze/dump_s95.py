@@ -25,7 +25,7 @@ def get_s95(bkg_yield = 0.0) :
     z = 0
 
     while True :
-        z = significance.binomial_exp_z(sig, bkg_yield, 0.33)
+        z = significance.binomial_exp_z(sig, bkg_yield, 0.4)
         if z > 1.64 :
             break
         if sig > 500 :

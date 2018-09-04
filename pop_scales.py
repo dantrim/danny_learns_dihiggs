@@ -68,7 +68,7 @@ def extract_scale_dataset(args, ignore_features = ['eventweight']) :
             jdata = {}
             jdata["variables"] = []
             for ivar, varname in enumerate(variables) :
-            	jdata["variables"].append( { "name" : varname, "offset" : offsets[ivar], "scale" : scales[ivar] } )
+            	jdata["variables"].append( { "name" : varname, "offset" : -1.0 * offsets[ivar], "scale" : 1.0 / scales[ivar] } )
             
             with open(output_json_name, 'w') as jsonfile :
             	json.dump(jdata, jsonfile)

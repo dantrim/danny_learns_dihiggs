@@ -193,7 +193,9 @@ def dump_scores(input_file, model, data_scaler, args) :
         for chunk in chunk_generator(input_file, dataset_name = args.dataset) :
 
             # apply the selection here
-            chunk = chunk[ (chunk['nBJets'] >= 1) & (chunk['mt2_bb'] > 65) ]
+            chunk = chunk[ (chunk['nBJets'] >= 1) & (chunk['HT2Ratio']>0.5)] # & (chunk['mt2_bb'] > 65) & (chunk['l1_pt']>20.) & (chunk['mll']>20.) ]
+            #chunk = chunk[ (chunk['nBJets'] >= 1) & (chunk['mt2_bb'] > 55) & (chunk['l1_pt']>20.) & (chunk['mll']>20.) ]
+            #chunk = chunk[ (chunk['nBJets'] >= 1) & (chunk['mt2_bb'] > 65) & (chunk['HT2Ratio']>0.5) ]
             if chunk.size == 0 : continue
 
             weights = chunk['eventweight']

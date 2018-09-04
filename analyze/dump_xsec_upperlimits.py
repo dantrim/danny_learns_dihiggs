@@ -29,7 +29,7 @@ class S95 :
     def s95(self, val) :
         self._s95 = float(val)
 
-    @proper
+    @property
     def type(self) :
         return type
     @type.setter
@@ -51,10 +51,10 @@ class Count :
         self._cutval = float(val)
 
     @property
-    def yield(self) :
+    def cutyield(self) :
         return self._yield
-    @yield.setter
-    def yield(self, val) :
+    @cutyield.setter
+    def cutyield(self, val) :
         self._yield = float(val)
 
     @property
@@ -103,11 +103,11 @@ def load_acc(input_filename) :
             cuteff = float(line[2])
             total_yield = float(line[3])
             counts = Count()
-            count.cutval = cutval
-            count.yield = cutyield
-            count.eff = cuteff
-            count.total_yield = total_yield
-            out[cutval] = count
+            counts.cutval = cutval
+            counts.cutyield = cutyield
+            counts.eff = cuteff
+            counts.total_yield = total_yield
+            out[cutval] = counts
     return out
 
 
@@ -127,16 +127,54 @@ def main() :
 
     truth_evnt_counts = 21298.8 # yield at EVNT/TRUTH stage 
 
+    lowest_UL = 999999
+    best_stuff = Count()
+
     for valid_cut_val in s95_dict :
         s95 = s95_dict[valid_cut_val]
         truth_counts = truth_dict[valid_cut_val]
         reco_counts = reco_dict[valid_cut_val]
 
-        vis_xsec_UL = s95 / lumi_value
+        vis_xsec_UL = s95.s95 / lumi_value
+        vis_xsec_UL /= 1000. # convert from [fb] to [pb]
 
         reco_efficiency = reco_counts.cutyield / truth_counts.cutyield
         truth_acceptance = truth_counts.cutyield / truth_evnt_counts
         acceptance_times_efficiency = reco_efficiency * truth_acceptance
+
+        kinematic_efficiency = 0.23849 # GenFiltEfficiency from custom WWbb signal sample with pT > 12 GeV requirement
+        kinematic_efficiency = kinematic_efficiency / 0.50 # remove effect of hBB and hWW filters to just get kinematic filter eff from MultiElecMuTau filter
+
+        w_lnu_efficiency = 0.3272**2 # square of the BR for the leptonic decay of W bosons
+
+        den_filter_factor = w_lnu_efficiency * kinematic_efficiency
+
+        denominator = acceptance_times_efficiency
+        denominator *= w_lnu_efficiency * kinematic_efficiency
+        denominator *= 2.0 * 0.57 * 0.21
+
+        numerator = vis_xsec_UL
+
+        if denominator != 0 and denominator > 0 :
+#            print("numerator = {}".format(numerator))
+#            print("denominator = {}".format(denominator))
+            xsec_ul = numerator / denominator
+            #print("CUT {} -> {}".format(valid_cut_val, xsec_ul))
+            print("CUT {}: UL {}, S95 {}, A {}, E = {}, AxE = {}, AxExK = {}".format(valid_cut_val, xsec_ul, s95.s95, truth_acceptance, reco_efficiency, acceptance_times_efficiency, acceptance_times_efficiency * den_filter_factor * 2.0 * 0.5809 * 0.2152))
+            if xsec_ul < lowest_UL :
+                lowest_UL = xsec_ul
+
+                best_stuff.lowest_UL = xsec_ul
+                best_stuff.cutval = valid_cut_val
+                best_stuff.s95 = s95.s95
+                best_stuff.acc = truth_acceptance
+                best_stuff.eff = reco_efficiency
+                best_stuff.a_times_e = acceptance_times_efficiency
+
+    #print("lowest UL = {}".format(lowest_UL))
+
+    print(60 * "=")
+    print("BEST: CUTVAL = {}, UL = {}, S95 = {}, A = {}, E = {}, AxE = {}".format(best_stuff.cutval, best_stuff.lowest_UL, best_stuff.s95, best_stuff.acc, best_stuff.eff, best_stuff.a_times_e))
 
         
 

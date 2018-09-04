@@ -449,7 +449,7 @@ def main() :
 
     model = load_model(args)
     validation_samples, data_scaler = load_input_file(args)
-    input_features, targets = build_combined_input(validation_samples, data_scaler = data_scaler, scale = True)
+    input_features, targets, _ = build_combined_input(validation_samples, data_scaler = data_scaler, scale = True)
 
 
     # plots
