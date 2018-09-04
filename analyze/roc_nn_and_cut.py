@@ -216,8 +216,6 @@ def make_roc_curves(signal_samples = [], bkg_samples = [], args = None) :
     ax.set_yscale('log')
     ax.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
     ax.set_ylabel('Background Rejection, $1/\\varepsilon_{b}$', horizontalalignment = 'right', y = 1)
-    #ax.set_xlabel('bin number')
-    #ax.set_ylabel('eff')
 
     draw_roc_curve(ax, h_sig = signal_nn_histo, h_bkg = bkg_nn_histo, label = "nn", sig_sumw2 = signal_nn_sumw2, bkg_sumw2 = bkg_nn_sumw2)
     draw_roc_curve(ax, h_sig = signal_cut_histo, h_bkg = bkg_cut_histo, label = "cut", sig_sumw2 = signal_cut_sumw2, bkg_sumw2 = bkg_cut_sumw2)
@@ -235,28 +233,220 @@ def make_roc_curves(signal_samples = [], bkg_samples = [], args = None) :
 
     fig.savefig("bkg_count_error.pdf", bbox_inches = 'tight', dpi = 200)
 
+############################################
+def get_data(sample, kind) :
 
+    lcd = 0.0
+    histo_data = []
+    weight_data = []
+    weight2_data = []
+
+    with h5py.File(sample.filename, 'r', libver = 'latest') as sample_file :
+        if 'superNt' not in sample_file :
+            print("ERROR superNt dataset not found in input file (={})".format(sample.filename))
+            sys.exit()
+        dataset = sample_file['superNt']
+        for chunk in chunk_generator(dataset) :
+            weights = chunk['eventweight']
+
+            # count the total number of weighted events at the base, denominator selection
+            #lcd_idx = (chunk['nBJets']>=1) & (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_llbb']>100) & (chunk['mt2_llbb']<140) & (chunk['dRll']<0.9)
+            lcd_idx = (chunk['nBJets']>=1)
+            #lcd_idx = chunk['nBJets'] >= 1
+            weights_lcd = weights[lcd_idx] * 36.1
+            lcd += np.sum(weights_lcd)
+
+            # now get the disciminants we want to scan over
+            if kind == 'nn' :
+                chunk = chunk[lcd_idx]
+                weights = weights[lcd_idx] * 36.1
+                data = chunk['nn_p_hh'] # target HH score from NN
+
+                histo_data.extend(data)
+                weight_data.extend(weights)
+                weight2_data.extend(weights**2)
+
+            elif kind == 'cut' :
+                sel_idx = (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_llbb']>100) & (chunk['mt2_llbb']<140) & (chunk['dRll']<0.9) & (chunk['HT2Ratio']>0.8) & (chunk['nBJets']==2) & (chunk['l1_pt']>20.) & (chunk['mll']>20.)
+                data = chunk[sel_idx]
+                weights = weights[sel_idx] * 36.1
+                data = data['mt2_bb'] # we are going to scan over mt2_bb in the cut based strategy
+
+                histo_data.extend(data)
+                weight_data.extend(weights)
+                weight2_data.extend(weights**2)
+
+    return lcd, histo_data, weight_data, weight2_data
+
+
+def get_histogram(samples, kind = '') :
+
+    if kind == '' :
+        print("ERROR get_histogram received no kind")
+        sys.exit()
+
+    total_lcd = 0.0
+    histo_data = []
+    weight_data = []
+    weight2_data = []
+    bins = []
+
+    for sample in samples :
+        print('get_histogram > {}'.format(sample.name))
+
+        if kind.lower() == 'nn' :
+            bw = 0.1
+            bins = np.arange(0, 10+bw, bw)
+            lcd, data, weights, weights_squared = get_data(sample, kind)
+
+            total_lcd += lcd
+            histo_data.extend( data )
+            weight_data.extend( weights )
+            weight2_data.extend( weights_squared )
+
+        elif kind.lower() == 'cut' :
+            bw = 1
+            bins = np.arange(0, 500+bw, bw)
+            lcd, data, weights, weights_squared = get_data(sample, kind)
+
+            total_lcd += lcd
+            histo_data.extend( data )
+            weight_data.extend( weights )
+            weight2_data.extend( weights_squared )
+
+    hist, _ = np.histogram( histo_data, bins = bins, weights = weight_data )
+    sumw2_hist, _ = np.histogram( histo_data, bins = bins, weights = weight2_data )
+    return total_lcd, hist, sumw2_hist
+
+def draw_roc_curve(ax, lcds, sig_histos, bkg_histos, label) :
+
+    total_sig_yield, total_bkg_yield = lcds
+    h_sig, sig_sumw2 = sig_histos
+    h_bkg, bkg_sumw2 = bkg_histos
+
+    sig_eff = np.cumsum(h_sig[::-1])[::-1]
+    bkg_eff = np.cumsum(h_bkg[::-1])[::-1]
+
+    # require selections with at least 1 weighted bkg event
+    min_cum_idx = bkg_eff > 1
+    sig_eff = sig_eff[min_cum_idx]
+    bkg_eff = bkg_eff[min_cum_idx]
+
+    sig_eff = sig_eff / total_sig_yield
+    bkg_eff = bkg_eff / total_bkg_yield
+    bkg_rej = 1.0 / bkg_eff
+
+    labels = {}
+    labels['nn'] = 'Multi-output NN'
+    labels['cut'] = 'Cut & Count'
+
+    colors = {}
+    colors['nn'] = 'b'
+    colors['cut'] = 'r'
+
+    # plot the nominal ROC curve
+    ax.plot(sig_eff, bkg_rej, linewidth = 1, color = colors[label])
+
+    # calculate the errors on the bkg rejection (stat error)
+    if bkg_sumw2.any() :
+
+        bkg_error = np.sqrt(bkg_sumw2)
+
+        # re-build the bkg discriminants with varied bin yields (+/- in stat error)
+        h_bkg_up = h_bkg + np.abs(bkg_error)
+        h_bkg_dn = h_bkg - np.abs(bkg_error)
+
+        delta_up = np.abs(h_bkg_up.sum() - total_bkg_yield)
+        delta_dn = np.abs(h_bkg_dn.sum() - total_bkg_yield)
+
+        total_bkg_yield_up = total_bkg_yield + delta_up
+        total_bkg_yield_dn = total_bkg_yield - delta_dn
+
+        # re-build the rejection values for the +/- stat error bkg histograms
+
+        # with YIELDS UP (REJECTION DOWN)
+        bkg_eff_up = np.cumsum(h_bkg_up[::-1])[::-1]
+        bkg_eff_up = bkg_eff_up[min_cum_idx]
+        bkg_eff_up = bkg_eff_up / total_bkg_yield_up
+        rej_up = 1.0 / bkg_eff_up
+
+        # with YIELDS DOWN (REJECTION UP)
+        bkg_eff_dn = np.cumsum(h_bkg_dn[::-1])[::-1]
+        bkg_eff_dn = bkg_eff_dn[min_cum_idx]
+        bkg_eff_dn = bkg_eff_dn / total_bkg_yield_dn
+        rej_dn = 1.0 / bkg_eff_dn
+
+        # LOWER ERROR BARS
+        rel_lower_error = np.abs( (rej_up - bkg_rej) / bkg_rej )
+
+        # UPPER ERROR BARS
+        rel_upper_error = np.abs( (rej_dn - bkg_rej) / bkg_rej )
+
+        # now plot the error band
+        ax.fill_between(sig_eff, bkg_rej - bkg_rej * rel_lower_error, bkg_rej + bkg_rej * rel_upper_error, alpha = 0.6, facecolor = colors[label], edgecolor = 'none', label = labels[label])
+
+
+def make_roc_curves_lcd(signal_sample, bkg_samples, args) :
+
+    signal_nn_lcd, signal_nn_histo, signal_nn_sumw2_histo = get_histogram(signal_sample, kind = 'nn')
+    bkg_nn_lcd, bkg_nn_histo, bkg_nn_sumw2_histo = get_histogram(bkg_samples, kind = 'nn')
+
+    signal_cut_lcd, signal_cut_histo, signal_cut_sumw2_histo = get_histogram(signal_sample, kind = 'cut')
+    bkg_cut_lcd, bkg_cut_histo, bkg_cut_sumw2_histo = get_histogram(bkg_samples, kind = 'cut')
+
+    if len(set([signal_nn_lcd, signal_cut_lcd])) != 1 :
+        print('ERROR signal LCD are not equal between cut and NN')
+        sys.exit()
+    if len(set([bkg_nn_lcd, bkg_cut_lcd])) != 1 :
+        print('ERROR bkg LCD are not equal between cut and NN')
+        sys.exit()
+
+
+    fig, ax = plt.subplots(1,1)
+    ax.set_xlim([-0.01, 1.01])
+    ax.set_yscale('log')
+    ax.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
+    ax.set_ylabel('Background Rejection, $\\varepsilon_{b}$', horizontalalignment = 'right', y = 1)
+
+    lcds = [signal_nn_lcd, bkg_nn_lcd]
+    sig_nn_histos = [signal_nn_histo, signal_nn_sumw2_histo]
+    bkg_nn_histos = [bkg_nn_histo, bkg_nn_sumw2_histo]
+    draw_roc_curve(ax, lcds = lcds, sig_histos = sig_nn_histos, bkg_histos = bkg_nn_histos, label = 'nn')
+
+    lcds = [signal_cut_lcd, bkg_cut_lcd]
+    sig_cut_histos = [signal_cut_histo, signal_cut_sumw2_histo]
+    bkg_cut_histos = [bkg_cut_histo, bkg_cut_sumw2_histo]
+    draw_roc_curve(ax, lcds = lcds, sig_histos = sig_cut_histos, bkg_histos = bkg_cut_histos, label = 'cut')
+
+    ax.legend(loc = 'best', frameon = False)
+    fig.savefig('roc_nn_cut_new.pdf', bbox_inches = 'tight', dpi = 200)
+    
 def main() :
 
-    hh_nn_sample = Sample("hh_nn", hh_nn_file, "")
-    tt_nn_sample = Sample("ttbar_nn", tt_nn_file, "")
-    wt_nn_sample = Sample("wt_nn", wt_nn_file, "")
-    z_nn_sample = Sample("zjets_nn", z_nn_file, "")
-    bkg_nn_samples = [tt_nn_sample, wt_nn_sample, z_nn_sample]
+    #hh_nn_sample = Sample("hh_nn", hh_nn_file, "")
+    #tt_nn_sample = Sample("ttbar_nn", tt_nn_file, "")
+    #wt_nn_sample = Sample("wt_nn", wt_nn_file, "")
+    #z_nn_sample = Sample("zjets_nn", z_nn_file, "")
+    #bkg_nn_samples = [tt_nn_sample, wt_nn_sample, z_nn_sample]
 
-    hh_cut_sample = Sample("hh_cut", hh_cut_file, "")
-    tt_cut_sample = Sample("ttbar_cut", tt_cut_file, "")
-    wt_cut_sample = Sample("wt_cut", wt_cut_file, "")
-    zll_cut_sample = Sample("zjets_ll_cut", zll_cut_file, "")
-    ztt_cut_sample = Sample("zjets_tt_cut", ztt_cut_file, "")
-    bkg_cut_samples = [tt_cut_sample, wt_cut_sample, zll_cut_sample, ztt_cut_sample]
+    #hh_cut_sample = Sample("hh_cut", hh_cut_file, "")
+    #tt_cut_sample = Sample("ttbar_cut", tt_cut_file, "")
+    #wt_cut_sample = Sample("wt_cut", wt_cut_file, "")
+    #zll_cut_sample = Sample("zjets_ll_cut", zll_cut_file, "")
+    #ztt_cut_sample = Sample("zjets_tt_cut", ztt_cut_file, "")
+    #bkg_cut_samples = [tt_cut_sample, wt_cut_sample, zll_cut_sample, ztt_cut_sample]
+
+    hh_sample = Sample("hh", hh_file, "")
+    tt_sample = Sample("ttbar", tt_file, "")
+    wt_sample = Sample("wt", wt_file, "")
+    zll_sample = Sample("zjets_ll", zll_file, "")
+    ztt_sample = Sample("zjets_tt", ztt_file, "")
 
     # this will be the group of samples we pass around
-    signal_samples = [ hh_nn_sample, hh_cut_sample ]
-    bkg_samples = [ bkg_nn_samples, bkg_cut_samples ]
+    signal_samples = [hh_sample]
+    bkg_samples = [tt_sample, wt_sample, zll_sample, ztt_sample]
 
-    bkg_names = ["_".join(s.name.split("_")[:-1]) for s in bkg_nn_samples]
-    bkg_names.extend( "_".join(s.name.split("_")[:-1]) for s in bkg_cut_samples)
+    bkg_names = ["_".join(s.name.split("_")[:-1]) for s in bkg_samples]
     bkg_names = list(set(bkg_names))
 
     parser = argparse.ArgumentParser(description = "Plot ROC curves with NN and cut-based stuff all in one")
@@ -275,7 +465,8 @@ def main() :
         bkg_samples = tmp
         bkg_names = [args.bkg]
 
-    make_roc_curves(signal_samples, bkg_samples, args)
+    #make_roc_curves(signal_samples, bkg_samples, args)
+    make_roc_curves_lcd(signal_samples, bkg_samples, args)
 
     
 
