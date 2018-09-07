@@ -384,7 +384,8 @@ class NNTestCallback :
             callbacks.append(early_stop)
         callbacks.append(auc_cb)
 
-        self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, validation_data = (x_val, y_val), callbacks = callbacks)
+        self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (x_val, y_val), callbacks = callbacks)
+        #self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, validation_data = (x_val, y_val), callbacks = callbacks)
 
     def fit_history(self) :
         return self._fit_history
