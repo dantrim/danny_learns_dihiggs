@@ -175,10 +175,13 @@ def draw_roc_curve(ax, lcds, sig_histo, bkg_histo, style = '-') :
     colors['totalbkg_top'] = 'r'
     colors['totalbkg_zll'] = 'g'
     colors['totalbkg_ztt'] = 'm'
+    colors['OBSdefault'] = 'k'
+    colors['OBScms'] = 'r'
 
-    if style == '-' and 'totalbkg' not in bkg_histo.name :
+
+    if style == '-' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name :
         label = '{} - Multi-output NN'.format(bkg_histo.name)
-    elif style == '--' and 'totalbkg' not in bkg_histo.name :
+    elif style == '--' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name :
         label = '{} - Single-output NN'.format(bkg_histo.name)
     elif 'totalbkg' in bkg_histo.name :
         if bkg_histo.name == 'totalbkg' :
@@ -189,9 +192,16 @@ def draw_roc_curve(ax, lcds, sig_histo, bkg_histo, style = '-') :
             label = 'Single-output NN ($Z\\rightarrow \\ell \\ell$)'
         elif 'ztt' in bkg_histo.name :
             label = 'Single-output NN ($Z\\rightarrow \\tau \\tau$)'
+    elif 'OBS' in bkg_histo.name :
+        print('OBS in bkg_histo.name! ({})'.format(bkg_histo.name))
+        if bkg_histo.name == 'OBSdefault' :
+            label = 'Multi-output (ATLAS inputs)'
+        elif bkg_histo.name == 'OBScms' :
+            label = 'Multi-output (CMS inputs)'
     else :
         label = bkg_histo.name
 
+    print('bkg_name = {}, label = {}'.format(bkg_histo.name, label))
 
     ax.plot(sig_eff, bkg_rej, linewidth = 1, label = label, ls = style, color = colors[bkg_histo.name])
 
@@ -502,6 +512,69 @@ def make_total_bkg_roc_curves(sample_dict) :
     #get_total_bkg_roc_curves(sample_dict, signal_name, bkg_names)
     get_total_bkg_roc_curves_with_ratio(sample_dict, signal_name, bkg_names)
 
+def get_total_obs_roc_curves(sample_dict, signal_name, bkg_names) :
+
+    fig = plt.figure(figsize = (7,8))
+    grid = GridSpec(100,100)
+    upper_pad = fig.add_subplot(grid[0:75,:])
+    lower_pad = fig.add_subplot(grid[80:100,:], sharex = upper_pad)
+
+    xlow, xhigh = 0.02, 0.26
+    upper_pad.set_xlim([xlow,xhigh])
+    lower_pad.set_xlim([xlow,xhigh])
+    upper_pad.set_yscale('log')
+    for ax in [upper_pad, lower_pad] :
+        ax.tick_params(axis = 'both', which = 'both', labelsize = 16, direction = 'in',
+            labelleft = True, bottom = True, top = True, left = True)
+        ax.grid(color = 'k', which = 'both', linestyle = '-', lw = 1, alpha = 0.1)
+
+    lower_pad.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
+    upper_pad.set_ylabel('Total Background Rejections, $1/\\varepsilon_{B}$', horizontalalignment = 'right', y = 1)
+    lower_pad.set_ylabel('Ratio')
+
+    # default NN
+    nn_dir = './training_default_4output/'
+    sig_eff_def, bkg_rej_def = build_and_draw_roc_curve(upper_pad, nn_dir, sample_dict, signal_name, bkg_names, label = 'OBSdefault')
+    nn_dir = './training_default_4output_cmsobs/'
+    sig_eff_cms, bkg_rej_cms = build_and_draw_roc_curve(upper_pad, nn_dir, sample_dict, signal_name, bkg_names, label = 'OBScms')
+
+    x_def = sig_eff_def[::-1]
+    y_def = bkg_rej_def[::-1]
+    x_cms = sig_eff_cms[::-1]
+    y_cms = bkg_rej_cms[::-1]
+
+    sig_idx = x_def < 0.27
+    x_def = x_def [ sig_idx ]
+    y_def = y_def [ sig_idx ]
+
+    cms_idx = x_cms < 0.27
+    x_cms = x_cms [ cms_idx ]
+    y_cms = y_cms [ cms_idx ]
+
+    x_new = np.linspace(x_def.min(), x_def.max(), 100)
+    def_y_smooth = spline(x_def, y_def, x_new)
+    cms_y_smooth = spline(x_cms, y_cms, x_new)
+
+    smooth_ratio = np.divide(def_y_smooth, cms_y_smooth)
+    lower_pad.plot(x_new[1:-1], smooth_ratio[1:-1], 'k-')
+
+
+    avg_ratio = np.mean(smooth_ratio)
+    lower_pad.plot([xlow, xhigh], [avg_ratio, avg_ratio], 'b--')
+    lower_pad.plot([xlow, xhigh], [1.0, 1.0], 'r--', zorder = 0)
+
+    upper_pad.legend(loc = 'best', frameon = False)
+    fig.savefig('roc_multi_obs_comp.pdf', bbox_inches = 'tight', dpi = 200)
+    
+
+    
+
+def make_obs_roc_curves(sample_dict) :
+
+    signal_name = 'hh'
+    bkg_names = [key for key in sample_dict if key is not 'hh']
+    get_total_obs_roc_curves(sample_dict, signal_name, bkg_names)
+
 def main() :
 
     hh_sample = Sample('hh', hh_file, '')
@@ -516,7 +589,8 @@ def main() :
     samples['ztt'] = ztt_sample
 
     #make_targetted_roc_curves(samples)
-    make_total_bkg_roc_curves(samples)
+    #make_total_bkg_roc_curves(samples)
+    make_obs_roc_curves(samples)
     
 
 
