@@ -32,7 +32,9 @@ def get_model(model_name = "") :
             "NNSimpleGoodForG2B2" : NNSimpleGoodForG2B2,
             "NNTest1B" : NNTest1B,
             "NNSimpleGoodForG2B3" : NNSimpleGoodForG2B3,
-            "NNTestCallback" : NNTestCallback }[model_name]()
+            "NNForHlvl" : NNForHlvl,
+            "NNForLowLvl" : NNForLowLvl,
+            "NNForHlvl2" : NNForHlvl2 } [model_name]()
 
 class TTOnlyTarget :
     def __init__(self) :
@@ -306,9 +308,9 @@ class NNSimpleGoodForG2B3 : # Sep5 : this model, wtih data at >=2 bjets only gav
     def fit_history(self) :
         return self._fit_history
 
-class NNTestCallback :
+class NNForHlvl :
     def __init__(self) :
-        self._name = "NNTestCallback"
+        self._name = "NNForHlvl"
         self._model = None
         self._fit_history = None
 
@@ -331,13 +333,6 @@ class NNTestCallback :
         x = Dense( n_nodes, **layer_opts ) (x)
         x = Dropout(0.1)(x)
         x = Dense( n_nodes, **layer_opts ) (x)
-        #x = Dense( 100, **layer_opts )(x)
-        #x = Dense( 100, **layer_opts )(x)
-        #x = Dense( n_nodes, **layer_opts )(x)
- #       x = Dropout(0.5)(x)
- #       x = Dense( n_nodes*2, **layer_opts )(x)
- #       x = Dense( n_nodes*2, **layer_opts )(x)
-        #x = Dense( n_nodes*2, **layer_opts )(x)
         predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer" )(x)
 
         model = Model( inputs = input_layer, outputs = predictions )
@@ -351,7 +346,161 @@ class NNTestCallback :
     def fit(self, n_classes, input_features, targets, n_epochs = 100, batch_size = 10000) :
 
         n_epochs = 400
+        batch_size = 2000
 
+        # encode
+        targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+
+        # randomize/shuffle the data
+        n_per_sample = int(input_features.shape[0] / n_classes)
+        randomize = np.arange(len(input_features))
+        np.random.shuffle(randomize)
+        shuffled_input_features = input_features[randomize]
+        shuffled_targets = targets_encoded[randomize]
+
+        fraction_for_validation = 0.2
+        total_number_of_samples = len(shuffled_targets)
+        n_for_validation = int(fraction_for_validation * total_number_of_samples)
+
+        x_train, y_train = shuffled_input_features[n_for_validation:], shuffled_targets[n_for_validation:]
+        x_val, y_val = shuffled_input_features[:n_for_validation], shuffled_targets[:n_for_validation]
+
+        do_lr_sched = False
+        do_early_stop = True
+        early_stop = keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 20, verbose = True, min_delta = 0.001)
+
+        auc_cb = wwbb_callbacks.roc_callback()
+
+        lr_schedule = keras.callbacks.LearningRateScheduler(wwbb_callbacks.lr_step_decay)
+
+        callbacks = []
+        if do_lr_sched :
+            callbacks.append(lr_schedule)
+        if do_early_stop :
+            callbacks.append(early_stop)
+        callbacks.append(auc_cb)
+
+        self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (x_val, y_val), callbacks = callbacks)
+        #self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, validation_data = (x_val, y_val), callbacks = callbacks)
+
+    def fit_history(self) :
+        return self._fit_history
+
+class NNForLowLvl :
+    def __init__(self) :
+        self._name = "NNForLowLvl"
+        self._model = None
+        self._fit_history = None
+
+    def name(self) :
+        return self._name
+
+    def model(self) :
+        return self._model
+
+    def build_model(self, n_inputs, n_outputs) :
+
+        n_nodes = 100
+        layer_opts = get_layer_opts()
+
+        input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+        x = Dense( n_nodes, **layer_opts ) (input_layer)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        x = Dropout(0.5)(x)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer" )(x)
+
+        model = Model( inputs = input_layer, outputs = predictions )
+        model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adadelta(lr=1.0, rho = 0.95, epsilon = 1e-08, decay = 0.0), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.00001, nesterov = True), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=True, lr = 0.001, decay=0.05), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+        self._model = model
+
+    def fit(self, n_classes, input_features, targets, n_epochs = 100, batch_size = 8000) :
+
+        n_epochs = 400
+
+        # encode
+        targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+
+        # randomize/shuffle the data
+        n_per_sample = int(input_features.shape[0] / n_classes)
+        randomize = np.arange(len(input_features))
+        np.random.shuffle(randomize)
+        shuffled_input_features = input_features[randomize]
+        shuffled_targets = targets_encoded[randomize]
+
+        fraction_for_validation = 0.2
+        total_number_of_samples = len(shuffled_targets)
+        n_for_validation = int(fraction_for_validation * total_number_of_samples)
+
+        x_train, y_train = shuffled_input_features[n_for_validation:], shuffled_targets[n_for_validation:]
+        x_val, y_val = shuffled_input_features[:n_for_validation], shuffled_targets[:n_for_validation]
+
+        do_lr_sched = False
+        do_early_stop = True
+        early_stop = keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 20, verbose = True, min_delta = 0.001)
+
+        auc_cb = wwbb_callbacks.roc_callback()
+
+        lr_schedule = keras.callbacks.LearningRateScheduler(wwbb_callbacks.lr_step_decay)
+
+        callbacks = []
+        if do_lr_sched :
+            callbacks.append(lr_schedule)
+        if do_early_stop :
+            callbacks.append(early_stop)
+        callbacks.append(auc_cb)
+
+        self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (x_val, y_val), callbacks = callbacks)
+        #self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, validation_data = (x_val, y_val), callbacks = callbacks)
+
+    def fit_history(self) :
+        return self._fit_history
+
+class NNForHlvl2 :
+    def __init__(self) :
+        self._name = "NNForHlv2"
+        self._model = None
+        self._fit_history = None
+
+    def name(self) :
+        return self._name
+
+    def model(self) :
+        return self._model
+
+    def build_model(self, n_inputs, n_outputs) :
+
+        n_nodes = 300
+        layer_opts = get_layer_opts()
+
+        input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+        x = Dense( n_nodes, **layer_opts ) (input_layer)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        x = Dropout(0.5)(x)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        x = Dropout(0.1)(x)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer" )(x)
+
+        model = Model( inputs = input_layer, outputs = predictions )
+        model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adadelta(lr=1.0, rho = 0.95, epsilon = 1e-08, decay = 0.0), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.00001, nesterov = True), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=True, lr = 0.001, decay=0.05), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+        self._model = model
+
+    def fit(self, n_classes, input_features, targets, n_epochs = 100, batch_size = 10000) :
+
+        batch_size = 1000
+
+        n_epochs = 400
         # encode
         targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
 

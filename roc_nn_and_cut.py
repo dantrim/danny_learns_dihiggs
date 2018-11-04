@@ -33,6 +33,25 @@ wt_file = "{}/wt_bkg_sep3.h5".format(filedir)
 zll_file = "{}/sherpa_zll_sep3.h5".format(filedir)
 ztt_file = "{}/sherpa_ztt_sep3.h5".format(filedir)
 
+filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/samples/bdefs/"
+hh_file = "{}/CENTRAL_123456.h5".format(filedir)
+tt_file = "{}/CENTRAL_410009_0to10.h5".format(filedir)
+wt_file = "{}/wt_bkg.h5".format(filedir)
+zll_file = "{}/sherpa_zll.h5".format(filedir)
+ztt_file = "{}/sherpa_ztt.h5".format(filedir)
+
+# bjet promot
+#filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/samples/bjet_mpromote/"
+#hh_file = "{}/hh_nonres_bmjets.h5".format(filedir)
+#tt_file = "{}/CENTRAL_410009.h5".format(filedir)
+#wt_file = "{}/wt_bkg.h5".format(filedir)
+#zll_file = "{}/sherpa_zll.h5".format(filedir)
+filedir = "/Users/dantrim/workarea/physics_analysis/wwbb/danny_learns_dihiggs/samples/nov2_cmscompstuff/"
+hh_file = "{}/CENTRAL_123456_nov2.h5".format(filedir)
+tt_file = "{}/CENTRAL_410009_trunc.h5".format(filedir)
+wt_file = "{}/wt_bkg.h5".format(filedir)
+zll_file = "{}/sherpa_zjets.h5".format(filedir)
+
 def get_nn_data(sample) :
 
     histo_data = []
@@ -77,7 +96,7 @@ def get_cut_data(sample) :
         for chunk in chunk_generator(dataset) :
             sel_idx = (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_llbb']>100) & (chunk['mt2_llbb']<140) & (chunk['HT2Ratio']>0.8) & (chunk['dRll']<0.9) & (chunk['nBJets']==2) & (chunk['l1_pt']>20.) & (chunk['mll']>20.)# & (chunk['mt2_bb']>150.)
             chunk = chunk[sel_idx]
-            weights = chunk['eventweight'] 
+            weights = chunk['eventweight']
             weights *= 36.1
 
             if 'ttbar' in sample.name :
@@ -167,7 +186,7 @@ def draw_roc_curve(ax, h_sig, h_bkg, label = "", sig_sumw2 = [], bkg_sumw2 = [])
 
     labels = {}
     labels['nn'] = 'Multi-output NN'
-    labels['cut'] = 'Cut & Count'
+    labels['cut'] = 'Conventional'
 
     colors = {}
     colors['nn'] = 'b'
@@ -218,6 +237,8 @@ def make_roc_curves(signal_samples = [], bkg_samples = [], args = None) :
     ax.set_yscale('log')
     ax.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
     ax.set_ylabel('Background Rejection, $1/\\varepsilon_{b}$', horizontalalignment = 'right', y = 1)
+    ax.tick_parems(axis = 'both', which = 'both', labelsize = 16, direction = 'in',
+            labelleft = True, bottom = True, top = True, right = True, left = True)
 
     draw_roc_curve(ax, h_sig = signal_nn_histo, h_bkg = bkg_nn_histo, label = "nn", sig_sumw2 = signal_nn_sumw2, bkg_sumw2 = bkg_nn_sumw2)
     draw_roc_curve(ax, h_sig = signal_cut_histo, h_bkg = bkg_cut_histo, label = "cut", sig_sumw2 = signal_cut_sumw2, bkg_sumw2 = bkg_cut_sumw2)
@@ -245,22 +266,29 @@ def get_data(sample, kind, scaler = None, model = None) :
 
     use_stored_model = scaler and model
     total_read = 0.0
+    total_pass_raw = 0
+    total_pass_w = 0.
 
     with h5py.File(sample.filename, 'r', libver = 'latest') as sample_file :
         if 'superNt' not in sample_file :
             print("ERROR superNt dataset not found in input file (={})".format(sample.filename))
             sys.exit()
         dataset = sample_file['superNt']
+        if 'hh' in sample.name :
+            #dataset = dataset[8800:]
+            dataset = dataset[19000:]
         for chunk in chunk_generator(dataset) :
             total_read += chunk.size
-            if total_read > 500000. : break
-            print("TOTAL READ = {}".format(total_read))
+            if total_read > 1000000. : break
+            #print("TOTAL READ = {}".format(total_read))
 
             weights = chunk['eventweight']
 
+            # HELLO
+
             # count the total number of weighted events at the base, denominator selection
             #lcd_idx = (chunk['nBJets']>=1) & (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_llbb']>100) & (chunk['mt2_llbb']<140) & (chunk['dRll']<0.9)
-            lcd_idx = (chunk['nBJets']>=2) #& (chunk['mt2_llbb']<140) #& (chunk['mbb']<140)# & (chunk['dRll']<0.9)
+            lcd_idx = (chunk['nBJets']>=1) #& (chunk['mt2_llbb']<140) #& (chunk['mbb']<140)# & (chunk['dRll']<0.9)
             #lcd_idx = chunk['nBJets'] >= 1
             weights_lcd = weights[lcd_idx] * 36.1
             lcd += np.sum(weights_lcd)
@@ -270,6 +298,14 @@ def get_data(sample, kind, scaler = None, model = None) :
                 chunk = chunk[lcd_idx]
                 weights = weights[lcd_idx] * 36.1
 
+                # add more
+                #more_idx = (chunk['nBMJets'] >= 2) & (chunk['nSJets']>0) & (chunk['mt2_bb_bm'] > 65) # & (chunk['mbb_bm'] > 100) & (chunk['mbb_bm'] < 140)
+                #more_idx = (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_bb']>65)#(chunk['mt2_bb']>30)# & (chunk['met']>45) & (chunk['l1_pt']>15)
+                #more_idx = (chunk['met']>50)# & (chunk['l1_pt']>20)
+                more_idx = (chunk['nBJets']>=2) & (chunk['mbb']>110) & (chunk['mbb']<140) & (chunk['mt2_bb']>65)
+                chunk = chunk[more_idx]
+                weights = weights[more_idx]
+
                 if use_stored_model :
                     input_features = chunk[scaler.feature_list()]
                     input_features = floatify(input_features, scaler.feature_list())
@@ -278,35 +314,23 @@ def get_data(sample, kind, scaler = None, model = None) :
 
                     num_data = scores[:,0] # get the HH score from NN output
                     den_data = scores[:,1]
-                    den_data += scores[:,2]
-                    den_data += scores[:,3]# * 0.1
-                    #den_data += scores[:,0]
+                    print('WARNING ONLY GRABBING ONE SCORE')
+                 #   den_data += scores[:,2]
+                 #   den_data += scores[:,3]# * 0.1
 
                     ok_idx = den_data != 0
                     num_data = num_data[ok_idx]
                     den_data = den_data[ok_idx]
 
-                    #d_tt_num = scores[:,1]
-                    #d_tt_den = scores[:,0]
-                    #d_tt_den += scores[:,2]
-                    #d_tt_den += scores[:,3]
-                    #ok_idx = d_tt_den != 0
-
-                    #num_data = num_data[ok_idx]
-                    #den_data = den_data[ok_idx]
-                    #d_tt_num = d_tt_num[ok_idx]
-                    #d_tt_den = d_tt_den[ok_idx]
-
-                    #d_tt = np.log(d_tt_num / d_tt_den)
-#                    print("mean d_tt = {}".format(np.mean(d_tt)))
-                    #ok_idx = d_tt < -2
-                    
-                    #num_data = num_data[ok_idx]
-                    #den_data = den_data[ok_idx]
 
                     weights = weights[ok_idx]
                     data = np.log(num_data / den_data)
-                    #print("MIN MAX = {} {}".format(np.min(data), np.max(data)))
+                    ok_idx = (data > -np.inf) & (data < np.inf)
+                    data = data[ok_idx]
+                    weights = weights[ok_idx]
+                    print("MIN MAX = {} {}".format(np.min(data), np.max(data)))
+                    total_pass_raw += data.size
+                    total_pass_w += np.sum(weights)
 
                 else :
                     data = chunk['nn_p_hh'] # target HH score from NN
@@ -316,7 +340,7 @@ def get_data(sample, kind, scaler = None, model = None) :
                 weight2_data.extend(weights**2)
 
             elif kind == 'cut' :
-                sel_idx = (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_llbb']>100) & (chunk['mt2_llbb']<140) & (chunk['dRll']<0.9) & (chunk['HT2Ratio']>0.8) & (chunk['nBJets']>=2) & (chunk['l1_pt']>20.) & (chunk['mll']>20.)
+                sel_idx = (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_llbb']>100) & (chunk['mt2_llbb']<140) & (chunk['dRll']<0.9) & (chunk['HT2Ratio']>0.8) & (chunk['nBJets']==2) & (chunk['l1_pt']>20.) & (chunk['mll']>20.)
                 data = chunk[sel_idx]
                 weights = weights[sel_idx] * 36.1
                 data = data['mt2_bb'] # we are going to scan over mt2_bb in the cut based strategy
@@ -325,6 +349,10 @@ def get_data(sample, kind, scaler = None, model = None) :
                 weight_data.extend(weights)
                 weight2_data.extend(weights**2)
 
+                total_pass_raw += data.size
+                total_pass_w += np.sum(weights)
+
+    print("Total pass for {} : {} ({})".format(sample.name, total_pass_w, total_pass_raw))
     return lcd, histo_data, weight_data, weight2_data
 
 def load_stored_model(nn_dir) :
@@ -343,7 +371,7 @@ def load_stored_model(nn_dir) :
 
     training_dir = "{}/training/".format(nn_dir)
     if not os.path.isdir(training_dir) :
-        print("ERROR could not find training directory dataset (looking for {})".format(training_dir)) 
+        print("ERROR could not find training directory dataset (looking for {})".format(training_dir))
         sys.exit()
 
     scaling_dataset = glob.glob("{}/*.h5".format(scaling_dir))
@@ -394,18 +422,25 @@ def get_histogram(samples, kind = '', nn_dir = '') :
     weight2_data = []
     bins = []
 
+    zjet_weights = []
+
     data_scaler = None
     loaded_model = None
     if nn_dir != '' :
         data_scaler, loaded_model = load_stored_model(nn_dir)
 
     for sample in samples :
+
         print('get_histogram > {}'.format(sample.name))
 
         if kind.lower() == 'nn' :
-            bw = 0.5
-            bins = np.arange(-50, 50+bw, bw)
+            bw = 0.1
+            #bins = np.arange(0, 1+bw, bw)
+            bins = np.arange(-100, 100+bw, bw)
+            #for ibin, x in enumerate(bins) :
+            #    print("XXXbins {} : {}".format(ibin, x))
             lcd, data, weights, weights_squared = get_data(sample, kind, scaler = data_scaler, model = loaded_model)
+            data = np.clip(data, bins[0], bins[-1])
 
             total_lcd += lcd
             histo_data.extend( data )
@@ -422,6 +457,14 @@ def get_histogram(samples, kind = '', nn_dir = '') :
             weight_data.extend( weights )
             weight2_data.extend( weights_squared )
 
+        #if 'zjet' in sample.name :
+        #    zjet_weights.extend(weights)
+
+    #if len(zjet_weights) :
+    #    fig, ax = plt.subplots(1,1)
+    #    ax.hist(zjet_weights, label = 'zjet weights')
+    #    fig.savefig('zjet_weights.pdf', bbox_inches = 'tight', dpi = 200)
+
     hist, _ = np.histogram( histo_data, bins = bins, weights = weight_data )
     sumw2_hist, _ = np.histogram( histo_data, bins = bins, weights = weight2_data )
     return total_lcd, hist, sumw2_hist
@@ -435,8 +478,8 @@ def draw_roc_curve(ax, lcds, sig_histos, bkg_histos, label) :
     sig_eff = np.cumsum(h_sig[::-1])[::-1]
     bkg_eff = np.cumsum(h_bkg[::-1])[::-1]
 
-    # require selections with at least 1 weighted bkg event
-    min_cum_idx = bkg_eff > 1.5
+    # require selections with at least N weighted bkg event
+    min_cum_idx = bkg_eff > 3
     sig_eff = sig_eff[min_cum_idx]
     bkg_eff = bkg_eff[min_cum_idx]
 
@@ -444,9 +487,13 @@ def draw_roc_curve(ax, lcds, sig_histos, bkg_histos, label) :
     bkg_eff = bkg_eff / total_bkg_yield
     bkg_rej = 1.0 / bkg_eff
 
+#    if 'cut' not in label.lower() :
+#        for i, rej in enumerate(bkg_rej) :
+#            print('[{}] bkg rej = {}, sig eff = {}'.format(i, rej, sig_eff[i]))
+
     labels = {}
     labels['nn'] = 'Multi-output NN'
-    labels['cut'] = 'Cut & Count'
+    labels['cut'] = 'Conventional'
 
     colors = {}
     colors['nn'] = 'b'
@@ -512,9 +559,15 @@ def make_roc_curves_lcd(signal_sample, bkg_samples, args) :
 
     fig, ax = plt.subplots(1,1)
     ax.set_xlim([-0.01, 1.01])
+    ax.set_xlim([-0.01, 0.126])
+    #ax.set_xlim([-0.01, 0.201])
+    #ax.set_xlim([-0.01, 0.202])
     ax.set_yscale('log')
     ax.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
-    ax.set_ylabel('Background Rejection, $\\varepsilon_{b}$', horizontalalignment = 'right', y = 1)
+    ax.set_ylabel('Background Rejection, $1/\\varepsilon_{b}$', horizontalalignment = 'right', y = 1)
+    ax.grid(color = 'k', which = 'both', linestyle = '-', lw = 0.5, alpha = 0.1)
+    ax.tick_params(axis = 'both', which = 'both', labelsize = 16, direction = 'in',
+            labelleft = True, bottom = True, top = True, right = True, left = True)
 
     lcds = [signal_nn_lcd, bkg_nn_lcd]
     sig_nn_histos = [signal_nn_histo, signal_nn_sumw2_histo]
@@ -527,8 +580,8 @@ def make_roc_curves_lcd(signal_sample, bkg_samples, args) :
     draw_roc_curve(ax, lcds = lcds, sig_histos = sig_cut_histos, bkg_histos = bkg_cut_histos, label = 'cut')
 
     ax.legend(loc = 'best', frameon = False)
-    fig.savefig('roc_nn_cut_new.pdf', bbox_inches = 'tight', dpi = 200)
-    
+    fig.savefig('roc_nn_cut_nov2_cmscomp_multi_zonly.pdf', bbox_inches = 'tight', dpi = 200)
+
 def main() :
 
     #hh_nn_sample = Sample("hh_nn", hh_nn_file, "")
@@ -548,11 +601,11 @@ def main() :
     tt_sample = Sample("ttbar", tt_file, "")
     wt_sample = Sample("wt", wt_file, "")
     zll_sample = Sample("zjets_ll", zll_file, "")
-    ztt_sample = Sample("zjets_tt", ztt_file, "")
+#    ztt_sample = Sample("zjets_tt", ztt_file, "")
 
     # this will be the group of samples we pass around
     signal_samples = [hh_sample]
-    bkg_samples = [tt_sample, wt_sample, zll_sample, ztt_sample]
+    bkg_samples = [tt_sample, wt_sample, zll_sample] #, ztt_sample]
 
     bkg_names = ["_".join(s.name.split("_")[:-1]) for s in bkg_samples]
     bkg_names = list(set(bkg_names))
@@ -577,8 +630,5 @@ def main() :
     #make_roc_curves(signal_samples, bkg_samples, args)
     make_roc_curves_lcd(signal_samples, bkg_samples, args)
 
-    
-
 if __name__ == '__main__' :
     main()
-

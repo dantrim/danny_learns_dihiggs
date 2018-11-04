@@ -136,11 +136,11 @@ def make_nn_output_plots( model = None, inputs = None, samples = None, targets =
         ax.grid(color='k', which='both', linestyle='--', lw=0.5, alpha=0.1, zorder = 0)
         ax.set_xlabel( "NN output for label {}".format(names[label]), horizontalalignment='right', x=1)
         #ax.set_xlim([1e-2,1.0])
-        ax.set_xlim([0,1])
+        ax.set_xlim([-0.01,1.01])
         ax.set_yscale('log')
         binning = np.arange(0,1,0.02)
         centers = (binning[1:-2] + binning[2:-1])/2
-        ax.set_xlim((centers[0], centers[-1])) 
+        ax.set_xlim((centers[0]-0.1, centers[-1]+0.1)) 
         for sample_label in nn_scores_dict :
             sample_scores_for_label = nn_scores_dict[sample_label][:,label]
             sample_weights = sample_with_label(sample_label, samples).eventweights
@@ -217,7 +217,7 @@ def make_discriminant_plots( model = None, inputs = None, samples = None, target
 #        ax.set_ylim([1e-2,2])
         binning = np.arange(-40,20,1)
         centers = (binning[1:-2] + binning[2:-1])/2
-        ax.set_xlim((centers[0], centers[-1])) 
+        ax.set_xlim((centers[0]-0.1, centers[-1]+0.1)) 
         ax.set_yscale('log')
 
         for sample_label in discriminants :

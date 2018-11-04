@@ -18,6 +18,8 @@ from keras import regularizers
 from keras import initializers
 import keras
 
+import wwbb_models
+
 # numpy
 import numpy as np
 seed = 347
@@ -243,44 +245,65 @@ def build_combined_input(training_samples, data_scaler = None, scale = True, reg
 
     return inputs, targets, regress_targets
 
-def build_keras_model( n_inputs, n_outputs ) :
+def build_and_train(wwbb_model, n_inputs, n_outputs, input_features, targets) :
 
-    n_nodes = 500
-    do_frac = 0.5
-    layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
+    wwbb_model.build_model(n_inputs, n_outputs)
+    wwbb_model.fit(n_outputs, input_features, targets, n_epochs = 100, batch_size = 10000)
+    return wwbb_model.model(), wwbb_model.fit_history()
 
-    input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
-    x = Dense( n_nodes, **layer_opts ) (input_layer)
-    x = Dropout(0.8)(x)
-#    x = Dense( n_nodes, **layer_opts ) (x)
+#def build_keras_model( n_inputs, n_outputs ) :
+#
+#    my_model = wwbb_models.NNHighLevel()
+#    my_model.build_model(n_inputs, n_outputs)
+#    return n
+#    
+#
+#    n_nodes = 800
+#    layer_opts = dict( activation = 'relu', kernel_initializer = initializers.VarianceScaling(scale = 1.0, mode = 'fan_in', distribution = 'normal', seed = seed))
+#
+#    input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+#    x = Dense( n_nodes, **layer_opts ) (input_layer)
 #    x = Dropout(0.8)(x)
-    x = Dense( 100 , **layer_opts ) (x)
-    x = Dropout(0.8)(x)
-    x = Dense( 500 , **layer_opts ) (x)
-    predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
-
-    model = Model(inputs = input_layer, outputs = predictions)
-    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.05, momentum = 0.02,decay=0.0001, nesterov = True), metrics = ['categorical_accuracy'] )
-    #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
-    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
-    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=True, lr = 0.001, decay=0.05), metrics = ['categorical_accuracy'] )
-    #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
-
-    return model
-
-def train(n_classes, input_features, targets, model, regression_targets = []) :
-
-    # encode the targets
-    targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
-
-    # fit
-    fit_history = None
-    if len(regression_targets) == 0 :
-        fit_history = model.fit(input_features, targets_encoded, epochs = 40, validation_split = 0.2, shuffle = True, batch_size = 8000)
-    else :
-        fit_history = model.fit(input_features, [targets_encoded, regression_targets], epochs = 100, validation_split = 0.2, shuffle = True, batch_size = 9000)
-
-    return model, fit_history
+#    x = Dense( n_nodes , **layer_opts ) (x)
+#    x = Dropout(0.8)(x)
+#    x = Dense( n_nodes , **layer_opts ) (x)
+#    predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer")(x)
+#
+#    model = Model(inputs = input_layer, outputs = predictions)
+#    model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.1, momentum = 0.00,decay=0.0001, nesterov = True), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = 'sgd', metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=True, lr = 0.001, decay=0.05), metrics = ['categorical_accuracy'] )
+#    #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+#
+#    return model
+#
+#def train(n_classes, input_features, targets, model, regression_targets = []) :
+#
+#    # encode the targets
+#    targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+#
+#    # number of training epochs
+#    n_epochs = 100
+#
+#    # batch size for training
+#    batch_size = 10000
+#
+#    # early stopping callback
+#    early_stop = keras.callbacks.EarlyStopping(monitor = 'val_categorical_accuracy', patience = 5, verbose = True)
+#
+#    # learning rate schedular
+#    #lr_scheduler = keras.callbacks.LearningRateScheduler(lr_schedule, verbose = 1)
+#        
+#
+#    # fit
+#    fit_history = None
+#    if len(regression_targets) == 0 :
+#        fit_history = model.fit(input_features, targets_encoded, epochs = n_epochs, validation_split = 0.2, shuffle = True, batch_size = batch_size, callbacks = [early_stop])
+#    else :
+#        fit_history = model.fit(input_features, [targets_encoded, regression_targets], epochs = 100, validation_split = 0.2, shuffle = True, batch_size = 9000)
+#
+#    return model, fit_history
 #def build_keras_model( n_inputs, n_outputs ) :
 #
 #    n_nodes = 1000
@@ -470,6 +493,7 @@ def main() :
     parser.add_argument("-i", "--input",
         help = "Provide input, pre-processed HDF5 file with training, validation, and scaling data",
         required = True)
+    parser.add_argument("-m", "--model-name", help = "Provide the name of the model to build and train", required = True)
     parser.add_argument("-o", "--outdir", help = "Provide an output directory do dump files [default: ./]", default = "./")
     parser.add_argument("-n", "--name", help = "Provide output filename descriptor", default = "test")
     parser.add_argument("-v", "--verbose", action = "store_true", default = False,
@@ -488,14 +512,18 @@ def main() :
     if len(regression_targets) == 0 :
         regression_targets = []
 
-    model = None
-    if args.regress == "" :
-        model = build_keras_model( len(data_scaler.feature_list()), len(training_samples) )
-    else :
-        model = build_keras_model_regression( len(data_scaler.feature_list()), len(training_samples) )
+    #model = None
+    #if args.regress == "" :
+    #    model = build_keras_model( len(data_scaler.feature_list()), len(training_samples) )
+    #else :
+    #    model = build_keras_model_regression( len(data_scaler.feature_list()), len(training_samples) )
 
-    # TODO : save the fit_history object for later use
-    model, fit_history = train(len(training_samples), input_features, targets, model, regression_targets = regression_targets)
+    ## TODO : save the fit_history object for later use
+    #model, fit_history = train(len(training_samples), input_features, targets, model, regression_targets = regression_targets)
+    n_inputs = len(data_scaler.feature_list())
+    n_outputs = len(training_samples)
+    my_model = wwbb_models.get_model(args.model_name)
+    model, fit_history = build_and_train(my_model, n_inputs, n_outputs, input_features, targets)
 
     # dump the fit history to file for later use
     with open("fit_history_{}.pkl".format(args.name), 'wb') as pickle_history :
