@@ -177,11 +177,13 @@ def draw_roc_curve(ax, lcds, sig_histo, bkg_histo, style = '-') :
     colors['totalbkg_ztt'] = 'm'
     colors['OBSdefault'] = 'k'
     colors['OBScms'] = 'r'
+    colors['TOPSPLITnew'] = 'k'
+    colors['TOPSPLITold'] = 'r'
 
 
-    if style == '-' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name :
+    if style == '-' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name and 'TOP' not in bkg_histo.name  :
         label = '{} - Multi-output NN'.format(bkg_histo.name)
-    elif style == '--' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name :
+    elif style == '--' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name and 'TOP' not in bkg_histo.name :
         label = '{} - Single-output NN'.format(bkg_histo.name)
     elif 'totalbkg' in bkg_histo.name :
         if bkg_histo.name == 'totalbkg' :
@@ -193,11 +195,15 @@ def draw_roc_curve(ax, lcds, sig_histo, bkg_histo, style = '-') :
         elif 'ztt' in bkg_histo.name :
             label = 'Single-output NN ($Z\\rightarrow \\tau \\tau$)'
     elif 'OBS' in bkg_histo.name :
-        print('OBS in bkg_histo.name! ({})'.format(bkg_histo.name))
         if bkg_histo.name == 'OBSdefault' :
             label = 'Multi-output (ATLAS inputs)'
         elif bkg_histo.name == 'OBScms' :
             label = 'Multi-output (CMS inputs)'
+    elif 'TOPSPLIT' in bkg_histo.name :
+        if 'new' in bkg_histo.name :
+            label = 'Combined $t\\bar{t}+Wt$'
+        elif 'old' in bkg_histo.name :
+            label = 'Seperated $t\\bar{t}+Wt$'
     else :
         label = bkg_histo.name
 
@@ -565,9 +571,65 @@ def get_total_obs_roc_curves(sample_dict, signal_name, bkg_names) :
 
     upper_pad.legend(loc = 'best', frameon = False)
     fig.savefig('roc_multi_obs_comp.pdf', bbox_inches = 'tight', dpi = 200)
-    
 
-    
+def get_split_top_roc_curves(sample_dict, signal_name, bkg_names) :
+
+    fig = plt.figure(figsize = (7,8))
+    grid = GridSpec(100,100)
+    upper_pad = fig.add_subplot(grid[0:75,:])
+    lower_pad = fig.add_subplot(grid[80:100,:], sharex = upper_pad)
+
+    xlow, xhigh = -0.01, 0.27
+    upper_pad.set_xlim([xlow,xhigh])
+    lower_pad.set_xlim([xlow,xhigh])
+    upper_pad.set_yscale('log')
+    for ax in [upper_pad, lower_pad] :
+        ax.tick_params(axis = 'both', which = 'both', labelsize = 16, direction = 'in',
+            labelleft = True, bottom = True, top = True, left = True)
+        ax.grid(color = 'k', which = 'both', linestyle = '-', lw = 1, alpha = 0.1)
+
+    lower_pad.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
+    upper_pad.set_ylabel('Total Background Rejection, $1/\\varepsilon_{B}$', horizontalalignment = 'right', y = 1)
+    lower_pad.set_ylabel('Ratio')
+
+    # default
+    nn_dir = './training_default_4output/'
+    sig_eff_new, bkg_rej_new = build_and_draw_roc_curve(upper_pad, nn_dir, sample_dict, signal_name, bkg_names, label = 'TOPSPLITnew')
+    nn_dir = './training_default_4output_note/'
+    sig_eff_old, bkg_rej_old = build_and_draw_roc_curve(upper_pad, nn_dir, sample_dict, signal_name, bkg_names, label = 'TOPSPLITold')
+
+    x_new = sig_eff_new[::-1]
+    y_new = bkg_rej_new[::-1]
+    x_old = sig_eff_old[::-1]
+    y_old = bkg_rej_old[::-1]
+
+    sig_idx = x_new < 0.27
+    x_new = x_new[sig_idx]
+    y_new = y_new[sig_idx]
+
+    sig_idx = x_old < 0.27
+    x_old = x_old[sig_idx]
+    y_old = y_old[sig_idx]
+
+    x_smooth = np.linspace(x_new.min(), x_new.max(), 100)
+    y_smooth_new = spline(x_new, y_new, x_smooth)
+    y_smooth_old = spline(x_old, y_old, x_smooth)
+
+    smooth_ratio = np.divide(y_smooth_new, y_smooth_old)
+    lower_pad.plot(x_smooth[1:-1], smooth_ratio[1:-1], 'k-')
+
+    avg_ratio = np.mean(smooth_ratio)
+    lower_pad.plot([xlow,xhigh], [avg_ratio,avg_ratio], 'b--')
+    lower_pad.plot([xlow,xhigh], [1.0,1.0], 'r--', zorder = 0)
+
+    upper_pad.legend(loc = 'best', frameon = False)
+    fig.savefig('roc_topsplit_comp.pdf', bbox_inches = 'tight', dpi = 200)
+
+def make_split_top_roc_curves(sample_dict) :
+
+    signal_name = 'hh'
+    bkg_names = [key for key in sample_dict if key is not 'hh']
+    get_split_top_roc_curves(sample_dict, signal_name, bkg_names)
 
 def make_obs_roc_curves(sample_dict) :
 
@@ -590,7 +652,8 @@ def main() :
 
     #make_targetted_roc_curves(samples)
     #make_total_bkg_roc_curves(samples)
-    make_obs_roc_curves(samples)
+    #make_obs_roc_curves(samples)
+    make_split_top_roc_curves(samples)
     
 
 
