@@ -3,11 +3,12 @@
 from sklearn.metrics import roc_auc_score
 from keras.callbacks import Callback
 import math
+import sys
 
 class roc_callback(Callback) :
     def on_train_begin(self, logs = {}) :
-        self.aucs = []
-        self.losses = []
+        self.val_aucs = []
+        self.val_losses = []
 
     def on_train_end(self, logs = {}) :
         return
@@ -16,13 +17,28 @@ class roc_callback(Callback) :
         return
 
     def on_epoch_end(self, epoch, logs = {}) :
-        self.losses.append(logs.get('val_loss'))
+
+        self.val_losses.append(logs.get('val_loss'))
+        #print('training data inputs (shape) : %s (%s)' % (list(self.model.inputs[0]), self.model.inputs[0].shape))
+        #print('training data outputs (shape): %s (%s)' % (list(self.model.targets[0]), self.model.targets[0].shape))
+        #self.train_losses.append(logs.get('loss'))
+
         y_pred = self.model.predict(self.validation_data[0])
         y_true = self.validation_data[1]
-        auc = roc_auc_score(y_true, y_pred)
-        print('roc_auc = %s' % str(round(auc,4)))
-        self.aucs.append(auc)
-        logs['roc_auc'] = self.aucs
+        val_auc = roc_auc_score(y_true, y_pred)
+
+        #y_train_pred = self.model.predict(self.train_data[0])
+        #y_train_true = self.train_data[1]
+        #train_auc = roc_auc_score(y_train_true, y_train_pred)
+        #print('train_roc_auc = %s, val_roc_auc = %s' % (str(round(train_auc,4), str(round(val_auc,4)))))
+        print('val_roc_auc = %s' % ( str(round(val_auc,4)) ))
+
+        self.val_aucs.append(val_auc)
+        #self.train_aucs.append(train_auc)
+        #self.aucs.append(auc)
+        logs['val_roc_auc'] = self.val_aucs
+        #logs['train_roc_auc'] = self.train_aucs
+
         return
 
     def on_batch_begin(self, batch, logs = {}) :
