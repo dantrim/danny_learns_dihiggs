@@ -248,7 +248,9 @@ def build_combined_input(training_samples, data_scaler = None, scale = True, reg
 def build_and_train(wwbb_model, n_inputs, n_outputs, input_features, targets) :
 
     wwbb_model.build_model(n_inputs, n_outputs)
+    #wwbb_model.fit_kfold(n_outputs, input_features, targets, n_epochs = 100, batch_size = 10000)
     wwbb_model.fit(n_outputs, input_features, targets, n_epochs = 100, batch_size = 10000)
+    
     return wwbb_model.model(), wwbb_model.fit_history()
 
 #def build_keras_model( n_inputs, n_outputs ) :
