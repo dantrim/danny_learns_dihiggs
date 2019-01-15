@@ -180,6 +180,13 @@ def draw_roc_curve(ax, lcds, sig_histo, bkg_histo, style = '-') :
     colors['TOPSPLITnew'] = 'k'
     colors['TOPSPLITold'] = 'r'
 
+    # january 13
+    colors['Default'] = 'k'
+    colors['DefaultEta'] = 'r'
+    colors['NoHlvlPlusEta'] = 'g'
+    colors['DefaultMt2'] = 'b'
+    colors['DefaultMt2Eta'] = 'm'
+
 
     if style == '-' and 'totalbkg' not in bkg_histo.name and 'OBS' not in bkg_histo.name and 'TOP' not in bkg_histo.name  :
         label = '{} - Multi-output NN'.format(bkg_histo.name)
@@ -206,6 +213,13 @@ def draw_roc_curve(ax, lcds, sig_histo, bkg_histo, style = '-') :
             label = 'Seperated $t\\bar{t}+Wt$'
     else :
         label = bkg_histo.name
+
+    # january 13
+    label = {'Default' : 'Original',
+                'DefaultEta' : 'Original + $\\eta$',
+                'NoHlvlPlusEta' : 'Reduced + $\\eta$',
+                'DefaultMt2' : 'Original + $m_{t2}^{bb}$',
+                'DefaultMt2Eta' : 'Original + $m_{t2}^{bb}$ + $\\eta$'}[bkg_histo.name]
 
     print('bkg_name = {}, label = {}'.format(bkg_histo.name, label))
 
@@ -298,7 +312,7 @@ def make_targetted_roc_curves(sample_dict) :
     #sig_histos_default, bkg_histos_dict_default = get_default_nn_histos(sample_dict, signal_name, bkg_names)
     get_default_nn_histos(sample_dict, signal_name, bkg_names)
 
-def get_total_bkg_disc(sample, scaler = None, model = None) :
+def get_total_bkg_disc(sample, scaler = None, model = None, add_mt2bb_cut = False) :
 
     lcd = 0.0
     histo_data = []
@@ -322,7 +336,11 @@ def get_total_bkg_disc(sample, scaler = None, model = None) :
             lcd += np.sum(weights)
 
             chunk = chunk[lcd_idx]
-            more_idx = (chunk['nBJets']>=2) & (chunk['mbb']>100) & (chunk['mbb']<140)
+            if add_mt2bb_cut :
+                print('get_total_bkg_disc    ADDING mt2_bb cut to selection')
+                more_idx = (chunk['nBJets']>=2) & (chunk['mbb']>100) & (chunk['mbb']<140) & (chunk['mt2_bb'] > 50)
+            else :
+                more_idx = (chunk['nBJets']>=2) & (chunk['mbb']>100) & (chunk['mbb']<140)
             chunk = chunk[more_idx]
             weights = weights[more_idx]
 
@@ -367,9 +385,10 @@ def build_and_draw_roc_curve(ax, nn_dir, sample_dict, signal_name, bkg_names, la
     data_scaler, loaded_model = load_stored_model(nn_dir)
 
     all_bkg_histos = []
-    h_sig = get_total_bkg_disc(sample_dict['hh'], scaler = data_scaler, model = loaded_model)
+    add_mt2_cut = False #label == 'Default'
+    h_sig = get_total_bkg_disc(sample_dict['hh'], scaler = data_scaler, model = loaded_model, add_mt2bb_cut = add_mt2_cut)
     for bkg in bkg_names :
-        h_bkg = get_total_bkg_disc(sample_dict[bkg], scaler = data_scaler, model = loaded_model)
+        h_bkg = get_total_bkg_disc(sample_dict[bkg], scaler = data_scaler, model = loaded_model, add_mt2bb_cut = add_mt2_cut)
         all_bkg_histos.append(h_bkg)
 
     h_bkg = Histo(label)
@@ -450,7 +469,7 @@ def get_total_bkg_roc_curves_with_ratio(sample_dict, signal_name, bkg_names) :
 
     lower_pad.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
     upper_pad.set_ylabel('Total Background Rejection, $1/\\varepsilon_{B}$', horizontalalignment = 'right', y = 1)
-    lower_pad.set_ylabel('Ratio', fontsize = 18)
+    lower_pad.set_ylabel('Multi-Output / $t\\bar{t}+Wt$') #, fontsize = 18)
 
     # default multi-output nn
     
@@ -535,7 +554,7 @@ def get_total_obs_roc_curves(sample_dict, signal_name, bkg_names) :
         ax.grid(color = 'k', which = 'both', linestyle = '-', lw = 1, alpha = 0.1)
 
     lower_pad.set_xlabel('Signal Efficiency, $\\varepsilon_{s}$', horizontalalignment = 'right', x = 1)
-    upper_pad.set_ylabel('Total Background Rejections, $1/\\varepsilon_{B}$', horizontalalignment = 'right', y = 1)
+    upper_pad.set_ylabel('Total Background Rejection, $1/\\varepsilon_{B}$', horizontalalignment = 'right', y = 1)
     lower_pad.set_ylabel('Ratio')
 
     # default NN
@@ -652,8 +671,8 @@ def main() :
 
     #make_targetted_roc_curves(samples)
     #make_total_bkg_roc_curves(samples)
-    #make_obs_roc_curves(samples)
-    make_split_top_roc_curves(samples)
+    make_obs_roc_curves(samples)
+    #make_split_top_roc_curves(samples)
     
 
 
