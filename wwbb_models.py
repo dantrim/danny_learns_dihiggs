@@ -9,6 +9,7 @@ from keras.optimizers import SGD
 from keras import regularizers
 from keras import initializers
 import keras
+import pickle
 
 import wwbb_callbacks
 
@@ -33,6 +34,7 @@ def get_model(model_name = "") :
             "NNTest1B" : NNTest1B,
             "NNSimpleGoodForG2B3" : NNSimpleGoodForG2B3,
             "NNForHlvl" : NNForHlvl,
+            "NNForHlvlHalf" : NNForHlvlHalf,
             "NNForLowLvl" : NNForLowLvl,
             "NNForHlvl2" : NNForHlvl2 } [model_name]()
 
@@ -382,6 +384,134 @@ class NNForHlvl :
 
         self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (x_val, y_val), callbacks = callbacks)
         #self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, validation_data = (x_val, y_val), callbacks = callbacks)
+
+    def fit_kfold(self, n_classes, input_features, targets, n_epochs = 100, batch_size = 10000) :
+
+        from sklearn.model_selection import StratifiedKFold
+
+        n_epochs = 48
+        batch_size = 2000
+
+        # encode
+        #targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+        # randomize/shuffle the data
+        n_per_sample = int(input_features.shape[0] / n_classes)
+        randomize = np.arange(len(input_features))
+        np.random.shuffle(randomize)
+        shuffled_input_features = input_features[randomize]
+        #shuffled_targets = targets_encoded[randomize]
+        shuffled_targets = targets[randomize]
+
+        auc_cb = wwbb_callbacks.roc_callback()
+
+        kfold = StratifiedKFold(n_splits = 10, shuffle = True, random_state = seed)
+
+        kfold_idx = 0
+
+        fit_histories = []
+        for train_data, val_data in kfold.split(shuffled_input_features, shuffled_targets) :
+
+            print('kfold {} : train_data = {}'.format(kfold_idx, train_data[:20]))
+            print('kfold {} : val_data   = {}'.format(kfold_idx, val_data[:20]))
+
+            tx = shuffled_input_features[train_data]
+            ty = shuffled_targets[train_data]
+
+            vx = shuffled_input_features[val_data]
+            vy = shuffled_targets[val_data]
+
+            # encode
+            ty = keras.utils.to_categorical(ty, num_classes = n_classes)
+            vy = keras.utils.to_categorical(vy, num_classes = n_classes)
+
+            self.build_model(30, 4)
+            #fit_history = my_model.fit(tx, ty, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (vx,vy), callbacks = [auc_cb])
+            fit_history = self._model.fit(tx, ty, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (vx,vy), callbacks = [auc_cb])
+            fit_histories.append(fit_history)
+
+            history_name = "fit_history_kfold_{}_WithDropout.pkl".format(kfold_idx)
+            with open(history_name, 'wb') as pickle_history :
+                print(75 * '=')
+                print('fit_kfold    Storing kfold {} history to file: {}'.format(kfold_idx, history_name))
+                pickle.dump( fit_history.history, pickle_history )
+            kfold_idx+=1
+
+        #for ih, h in enumerate(fit_histories) :
+        #    name = 'fit_history_kfold_{}_NoDropout.pkl'.format(ih)
+        #    with open(name, 'wb') as pickle_history :
+        #        pickle.dump(h, pickle_history)
+
+        self._fit_history = fit_histories[0] # just use the last one
+
+    def fit_history(self) :
+        return self._fit_history
+
+class NNForHlvlHalf :
+    def __init__(self) :
+        self._name = "NNForHlvlHalf"
+        self._model = None
+        self._fit_history = None
+
+    def name(self) :
+        return self._name
+
+    def model(self) :
+        return self._model
+
+    def build_model(self, n_inputs, n_outputs) :
+
+        n_nodes = 275
+        layer_opts = get_layer_opts()
+
+        input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
+        x = Dense( n_nodes, **layer_opts ) (input_layer)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        x = Dropout(0.3)(x)
+        x = Dense( n_nodes, **layer_opts ) (x)
+        predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer" )(x)
+
+        model = Model( inputs = input_layer, outputs = predictions )
+        model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adadelta(lr=1.0, rho = 0.95, epsilon = 1e-08, decay = 0.0), metrics = ['categorical_accuracy'] )
+        self._model = model
+
+    def fit(self, n_classes, input_features, targets, n_epochs = 100, batch_size = 10000) :
+
+        n_epochs = 400
+        batch_size = 2000
+
+        # encode
+        targets_encoded = keras.utils.to_categorical(targets, num_classes = n_classes)
+
+        # randomize/shuffle the data
+        n_per_sample = int(input_features.shape[0] / n_classes)
+        randomize = np.arange(len(input_features))
+        np.random.shuffle(randomize)
+        shuffled_input_features = input_features[randomize]
+        shuffled_targets = targets_encoded[randomize]
+
+        fraction_for_validation = 0.2
+        total_number_of_samples = len(shuffled_targets)
+        n_for_validation = int(fraction_for_validation * total_number_of_samples)
+
+        x_train, y_train = shuffled_input_features[n_for_validation:], shuffled_targets[n_for_validation:]
+        x_val, y_val = shuffled_input_features[:n_for_validation], shuffled_targets[:n_for_validation]
+
+        do_lr_sched = False
+        do_early_stop = True
+        early_stop = keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 20, verbose = True, min_delta = 0.001)
+
+        auc_cb = wwbb_callbacks.roc_callback()
+
+        lr_schedule = keras.callbacks.LearningRateScheduler(wwbb_callbacks.lr_step_decay)
+
+        callbacks = []
+        if do_lr_sched :
+            callbacks.append(lr_schedule)
+        if do_early_stop :
+            callbacks.append(early_stop)
+        callbacks.append(auc_cb)
+
+        self._fit_history = self._model.fit(x_train, y_train, epochs = n_epochs, batch_size = batch_size, shuffle = True, validation_data = (x_val, y_val), callbacks = callbacks)
 
     def fit_history(self) :
         return self._fit_history
