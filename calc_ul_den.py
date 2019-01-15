@@ -123,8 +123,12 @@ def main() :
     # truth acceptance
     acceptance = truth_sr_counts_weighted / n_total_truth
 
+    print('ACCEPTANCE = {0:.5f}'.format(acceptance))
+
     # reco efficiency
     reco_efficiency = reco_sr_counts_weighted / truth_sr_counts_weighted
+
+    print('EFFICIENCY = {0:.5f}'.format(reco_efficiency))
 
     # acceptance x efficiency
     a_x_e = acceptance * reco_efficiency
