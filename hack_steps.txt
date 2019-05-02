@@ -1,0 +1,20 @@
+# pre-process to make a combined dataset with the training/test features and scaling information
+python preprocess.py -i ./filelists/filelist.txt --outdir ./ml_train_test_2 -f ./feature_lists/feature_list.txt -d truth
+
+# train, based on the file produced during preprocess
+# -> this produces architecture and weights files: architecture_foo.json, weights_foo.h5
+python train.py -i ./ml_train_test/wwbb_preprocessed.h5 -m WWbbNN -o ./ml_train_test/training/
+
+# "pop" the scaling dataset and place in JSON format
+python pop_scales.py -i ./ml_train_test/wwbb_preprocessed_2.h5 --outdir ./ml_train_test/scaling/ -j
+
+# LWTNN convert
+# -> STEP 1: build a template file that needs to have variable names and scaling information filled in
+<path-to-lwtnn>/converters/kerasfunc2json.py architecture_foo.json weights_foo.h5 > lwtnn_template.json
+
+# -> STEP 2: replace the template variable scales and offsets in "lwtnn_template.json" with the information in the JSON file produced by "pop_scales"
+
+# -> STEP 3: run the lwtnn converter script again but with a third argument that is the filled-in template file
+<path-to-lwtnn>/converters/kerasfunc2json.py architecture_foo.json weights_foo.h5 lwtnn_template.json> lwtnn_nn_file.json
+
+# the file "lwtnn_nn_file.json" is the single input for LWTNN C++ interface
