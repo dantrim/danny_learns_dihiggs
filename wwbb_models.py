@@ -324,30 +324,33 @@ class NNForHlvl :
 
     def build_model(self, n_inputs, n_outputs) :
 
-        n_nodes = 275
+        #n_nodes = 275
+        n_nodes = 250
         layer_opts = get_layer_opts()
 
         input_layer = Input( name = "InputLayer", shape = (n_inputs,) )
         x = Dense( n_nodes, **layer_opts ) (input_layer)
-        x = Dense( n_nodes, **layer_opts ) (x)
+        #x = Dense( n_nodes, **layer_opts ) (x)
         x = Dropout(0.5)(x)
         x = Dense( n_nodes, **layer_opts ) (x)
-        x = Dense( n_nodes, **layer_opts ) (x)
-        x = Dropout(0.1)(x)
-        x = Dense( n_nodes, **layer_opts ) (x)
+        #x = Dense( n_nodes, **layer_opts ) (x)
+        #x = Dropout(0.1)(x)
+        #x = Dense( n_nodes, **layer_opts ) (x)
         predictions = Dense( n_outputs, activation = 'softmax', name = "OutputLayer" )(x)
 
         model = Model( inputs = input_layer, outputs = predictions )
-        model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adadelta(lr=1.0, rho = 0.95, epsilon = 1e-08, decay = 0.0), metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adadelta(lr=1.0, rho = 0.95, epsilon = 1e-08, decay = 0.0), metrics = ['categorical_accuracy'] )
         #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.SGD(lr=0.2, momentum = 0.02,decay=0.00001, nesterov = True), metrics = ['categorical_accuracy'] )
         #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adagrad(lr = 0.03, decay=0.15), metrics = ['categorical_accuracy'] )
         #model.compile( loss = 'categorical_crossentropy', optimizer = keras.optimizers.Adam(amsgrad=True, lr = 0.001, decay=0.05), metrics = ['categorical_accuracy'] )
-        #model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
+        #model.compile( loss = 'categorical_crossentropy', optimizer = 'adadelta', metrics = ['categorical_accuracy'] )
+        model.compile( loss = 'categorical_crossentropy', optimizer = 'adam', metrics = ['categorical_accuracy'] )
         self._model = model
 
     def fit(self, n_classes, input_features, targets, n_epochs = 100, batch_size = 10000) :
 
         n_epochs = 400
+        #batch_size = 10000
         batch_size = 2000
 
         # encode
@@ -360,10 +363,31 @@ class NNForHlvl :
         shuffled_input_features = input_features[randomize]
         shuffled_targets = targets_encoded[randomize]
 
-        fraction_for_validation = 0.2
+        #fraction_for_validation = 0.3 # dantrim Apri 3 : this was 0.3 at this date
+        fraction_for_validation = 0.2 # dantrim Apri 3 : this was 0.3 at this date
         total_number_of_samples = len(shuffled_targets)
         n_for_validation = int(fraction_for_validation * total_number_of_samples)
 
+        #split_selection = 4
+        #print( " ****** PERFORMING TRAINING SAMPLE SPLIT FOR RUSTEM : SPLIT %d ****** " % split_selection)
+        #print( " ****** PERFORMING TRAINING SAMPLE SPLIT FOR RUSTEM : SPLIT %d ****** " % split_selection)
+        #print( " ****** PERFORMING TRAINING SAMPLE SPLIT FOR RUSTEM : SPLIT %d ****** " % split_selection)
+        #print( " ****** PERFORMING TRAINING SAMPLE SPLIT FOR RUSTEM : SPLIT %d ****** " % split_selection)
+        #print( " ****** PERFORMING TRAINING SAMPLE SPLIT FOR RUSTEM : SPLIT %d ****** " % split_selection)
+        #print( " ****** PERFORMING TRAINING SAMPLE SPLIT FOR RUSTEM : SPLIT %d ****** " % split_selection)
+        #shuffled_input_features_split = np.array_split(shuffled_input_features, 5)
+        #shuffled_targets_split = np.array_split(shuffled_targets, 5)
+        ##n_0, n_1, n_2, n_3, n_4  = [0, 1, 2, 3, 4]
+        ##n_0, n_1, n_2, n_3, n_4  = [1, 2, 3, 4, 0]
+        ##n_0, n_1, n_2, n_3, n_4  = [2, 3, 4, 0, 1]
+        ##n_0, n_1, n_2, n_3, n_4  = [3, 4, 0, 1, 2]
+        #n_0, n_1, n_2, n_3, n_4  = [4, 0, 1, 2, 3]
+        #x_train = np.concatenate( (shuffled_input_features_split[n_0], shuffled_input_features_split[n_1], shuffled_input_features_split[n_2], shuffled_input_features_split[n_3]) )
+        #y_train = np.concatenate( (shuffled_targets_split[n_0], shuffled_targets_split[n_1], shuffled_targets_split[n_2], shuffled_targets_split[n_3]) )
+        #x_val = shuffled_input_features_split[n_4]
+        #y_val = shuffled_targets_split[n_4]
+
+        # dantrim Apr 3 : these two lines are the default method, commented out for doing Rustem splits
         x_train, y_train = shuffled_input_features[n_for_validation:], shuffled_targets[n_for_validation:]
         x_val, y_val = shuffled_input_features[:n_for_validation], shuffled_targets[:n_for_validation]
 

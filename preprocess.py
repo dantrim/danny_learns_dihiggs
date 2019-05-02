@@ -300,7 +300,7 @@ def preprocess(inputs, args) :
     output_filename += "/{}".format(args.output)
     output_filename = unique_filename(output_filename)
 
-    with h5py.File(output_filename, "w", libver = "latest") as outfile :
+    with h5py.File(output_filename, "w") as outfile : #, libver = "latest") as outfile :
 
         sample_group = outfile.create_group("samples")
         training_size = -1

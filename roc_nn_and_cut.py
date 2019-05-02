@@ -397,7 +397,7 @@ def load_stored_model(nn_dir) :
         if 'scaling' in input_file :
             scaling_group = input_file['scaling']
             scaling_dataset = scaling_group['scaling_data']
-            data_scaler = DataScaler( scaling_dataset = scaling_dataset, ignore_features = ['eventweight'] )
+            data_scaler = DataScaler( scaling_dataset = scaling_dataset, ignore_features = ['eventweight', 'eventNumber'] )
             print("Loaded DataScaler found {} features as inputs".format(len(data_scaler.feature_list())))
         else :
             print("ERROR scaling dataset (={}) does not have a scaling top level node".format(scaling_dataset_name))

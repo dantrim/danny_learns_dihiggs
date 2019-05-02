@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import sys
+import sys, os
 import argparse
 from preprocess import mkdir_p, unique_filename
 
 # h5py
+
 import h5py
 
-def extract_scale_dataset(args, ignore_features = ['eventweight']) :
+def extract_scale_dataset(args, ignore_features = ['eventweight', 'eventNumber']) :
 
     """
     From the user-provided path to the input HDF5 file produced
@@ -43,7 +44,7 @@ def extract_scale_dataset(args, ignore_features = ['eventweight']) :
         output_name += "_scaling_data"
         if args.outdir != "" :
             mkdir_p(args.outdir)
-        output_name = "{}/{}".format(args.outdir, output_name)
+        output_name = "{}/{}".format(os.path.abspath(args.outdir), output_name)
 
         if args.to_json :
             output_json_name = output_name + ".json"
@@ -74,7 +75,7 @@ def extract_scale_dataset(args, ignore_features = ['eventweight']) :
             	json.dump(jdata, jsonfile)
 
         output_name += ".h5"
-        with h5py.File(output_name, 'w', libver = 'latest') as output_file :
+        with h5py.File(output_name, 'w') as output_file : #, libver = 'latest') as output_file :
             scaling_group = output_file.create_group(scaling_group_name)
 
             # store the name of the original input file so that we can (loosely)

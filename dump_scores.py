@@ -63,7 +63,7 @@ def load_scaler(args) :
         if "scaling" in input_file :
             scaling_group = input_file['scaling']
             scaling_dataset = scaling_group['scaling_data']
-            data_scaler = DataScaler( scaling_dataset = scaling_dataset, ignore_features = ['eventweight'] )
+            data_scaler = DataScaler( scaling_dataset = scaling_dataset, ignore_features = ['eventweight', 'eventNumber'] )
     return data_scaler
 
 def load_model(args) :
