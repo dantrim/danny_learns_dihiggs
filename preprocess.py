@@ -192,7 +192,7 @@ def datasets_with_name(input_files = [], dataset_name = "", req_fields = None) :
 
     out = []
     for ifile in input_files :
-        with h5py.File(ifile.filepath, 'r', libver = 'latest') as sample_file :
+        with h5py.File(ifile.filepath, 'r') as sample_file :
             if dataset_name in sample_file :    
                 dtype = sample_file[dataset_name].dtype.names
                 sample_fields = list(sample_file[dataset_name].dtype.names)
@@ -262,7 +262,7 @@ def preprocess_file(input_file, input_group, train_size, args) :
     if feature_list == "all" :
         feature_list = []
 
-    with h5py.File(input_file.filepath, 'r', libver = 'latest') as infile :
+    with h5py.File(input_file.filepath, 'r') as infile :
         ds = infile[args.dataset_name]
 
         # hardcode the selection
@@ -270,7 +270,6 @@ def preprocess_file(input_file, input_group, train_size, args) :
         ds = ds[indices]
 
         if len(feature_list) > 0 :
-#            ds = ds[tuple(feature_list)]
             ds = ds[feature_list]
 
         if input_file.label == 0 and train_size < 0 :
@@ -299,7 +298,7 @@ def preprocess(inputs, args) :
     output_filename += "/{}".format(args.output)
     output_filename = unique_filename(output_filename)
 
-    with h5py.File(output_filename, "w") as outfile : #, libver = "latest") as outfile :
+    with h5py.File(output_filename, "w") as outfile :
 
         sample_group = outfile.create_group("samples")
         training_size = -1

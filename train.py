@@ -181,7 +181,7 @@ def load_input_file(args) :
     if args.regress != "" :
         features_to_ignore.append(args.regress)
 
-    with h5py.File(args.input, 'r', libver = 'latest') as input_file :
+    with h5py.File(args.input, 'r') as input_file :
 
         # look up the scalings first, in order to build the feature list used for the Sample creation
         if scaling_group_name in input_file :

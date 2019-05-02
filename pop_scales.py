@@ -31,7 +31,7 @@ def extract_scale_dataset(args, ignore_features = ['eventweight', 'eventNumber']
 
     scaling_dataset = None
 
-    with h5py.File(args.input, 'r', libver = 'latest') as input_file :
+    with h5py.File(args.input, 'r') as input_file :
 
         if scaling_group_name in input_file :
             scaling_group = input_file[scaling_group_name]
@@ -75,7 +75,7 @@ def extract_scale_dataset(args, ignore_features = ['eventweight', 'eventNumber']
             	json.dump(jdata, jsonfile)
 
         output_name += ".h5"
-        with h5py.File(output_name, 'w') as output_file : #, libver = 'latest') as output_file :
+        with h5py.File(output_name, 'w') as output_file :
             scaling_group = output_file.create_group(scaling_group_name)
 
             # store the name of the original input file so that we can (loosely)
