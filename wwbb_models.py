@@ -28,7 +28,7 @@ def get_model(model_name = "") :
 
     return {
             "WWbbNN" : WWbbNN
-    }
+    }[model_name]()
 
 class WWbbNN :
     def __init__(self) :
@@ -42,7 +42,7 @@ class WWbbNN :
     def model(self) :
         return self._model
 
-    def build_model(self, n_inputs, n_outputs) :
+    def build_model(self, n_inputs,  n_outputs) :
 
         #n_nodes = 275
         n_nodes = 250

@@ -35,4 +35,3 @@ l1_eta
 bj0_eta
 bj1_eta
 mt2_bb
-hh_X_mass
