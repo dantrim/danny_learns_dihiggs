@@ -1,0 +1,4 @@
+0 hh /work/ws/atlas/br1033-nn/samples/sample_wwbb2L.h5
+1 top /work/ws/atlas/br1033-nn/samples/sample_top.h5
+2 zsf /work/ws/atlas/br1033-nn/samples/sample_zsf.h5
+3 ztt /work/ws/atlas/br1033-nn/samples/sample_ztt.h5
