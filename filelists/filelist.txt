@@ -1,0 +1,4 @@
+0 hh /data/uclhc/uci/user/dantrim/WWBBMLEARN/training/samples_jan15/wwbb2L_combined.h5
+1 tt /data/uclhc/uci/user/dantrim/WWBBMLEARN/training/samples_jan15/tt_0_12_jan15.h5
+2 wt /data/uclhc/uci/user/dantrim/WWBBMLEARN/training/samples_jan15/wt_bkg_jan15.h5
+3 zll /data/uclhc/uci/user/dantrim/WWBBMLEARN/training/samples_jan15/z_sf_jan15.h5
