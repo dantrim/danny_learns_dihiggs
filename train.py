@@ -177,7 +177,7 @@ def load_input_file(args) :
     samples = []
     data_scaler = None
 
-    features_to_ignore = ["eventweight"]
+    features_to_ignore = ["eventweight", "eventNumber"]
     if args.regress != "" :
         features_to_ignore.append(args.regress)
 
@@ -528,6 +528,7 @@ def main() :
     model, fit_history = build_and_train(my_model, n_inputs, n_outputs, input_features, targets)
 
     # dump the fit history to file for later use
+    #with open("./ml_training_apr3_split_4/fit_history_{}.pkl".format(args.name), 'wb') as pickle_history :
     with open("fit_history_{}.pkl".format(args.name), 'wb') as pickle_history :
         pickle.dump( fit_history.history, pickle_history )
 
