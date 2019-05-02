@@ -1,0 +1,4 @@
+0 hh /afs/cern.ch/work/d/dantrim/public/wwbb_hack/samples/sample_wwbb2L.h5
+1 top /afs/cern.ch/work/d/dantrim/public/wwbb_hack/samples/sample_top.h5
+2 zsf /afs/cern.ch/work/d/dantrim/public/wwbb_hack/samples/sample_zsf.h5
+3 ztt /afs/cern.ch/work/d/dantrim/public/wwbb_hack/samples/sample_ztt.h5
