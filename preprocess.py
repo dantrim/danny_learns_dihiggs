@@ -266,8 +266,7 @@ def preprocess_file(input_file, input_group, train_size, args) :
         ds = infile[args.dataset_name]
 
         # hardcode the selection
-        indices = (ds['nBJets'] >= 1)# & (ds['mt2_bb'] > 50)
-#        indices = (ds['nBMJets'] >= 2) & (ds['nBJets'] >= 1) #(ds['nSJets'] >= 1) & (ds['nBJets'] >= 1)
+        indices = (ds['nBJets'] >= 1)
         ds = ds[indices]
 
         if len(feature_list) > 0 :
